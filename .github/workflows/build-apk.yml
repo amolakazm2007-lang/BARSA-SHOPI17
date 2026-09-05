@@ -5,9 +5,6 @@ on:
   push:
     branches:
       - main
-  pull_request:
-    branches:
-      - main
 
 permissions:
   contents: read
@@ -57,6 +54,9 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
+      - name: Prepare BARSA runtime
+        run: npm run prepare:runtime
+
       - name: Quality and security gates
         shell: bash
         run: |
@@ -66,9 +66,6 @@ jobs:
           npm run final:audit
           npm run check:packaging
           npm audit --omit=dev --audit-level=critical --json > reports/npm-audit.json
-
-      - name: Prepare BARSA runtime
-        run: npm run prepare:runtime
 
       - name: Build web app
         run: npm run build
