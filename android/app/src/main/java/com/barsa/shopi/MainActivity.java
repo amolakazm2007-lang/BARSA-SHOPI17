@@ -5,16 +5,17 @@ import android.os.Bundle;
 import android.os.Build;
 import android.content.*;
 import android.net.Uri;
-import android.provider.Settings;
 import android.webkit.*;
 import android.view.*;
 import android.graphics.Color;
-import android.graphics.Insets;
 import android.window.OnBackInvokedCallback;
 import android.window.OnBackInvokedDispatcher;
-import android.content.res.Configuration;
 import java.io.IOException;
 import java.util.UUID;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsCompat;
 
 public final class MainActivity extends Activity {
     private static final int FILE_CHOOSER = 9049;
@@ -41,26 +42,37 @@ public final class MainActivity extends Activity {
     }
 
     private void configureWindow() {
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         getWindow().setStatusBarColor(Color.TRANSPARENT);
         getWindow().setNavigationBarColor(Color.TRANSPARENT);
-        if (Build.VERSION.SDK_INT >= 30) getWindow().setDecorFitsSystemWindows(false);
     }
 
     private void applyWindowInsets(WebView target) {
-        target.setOnApplyWindowInsetsListener((view, windowInsets) -> {
-            if (Build.VERSION.SDK_INT >= 30) {
-                Insets system = windowInsets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
-                boolean imeVisible = windowInsets.isVisible(WindowInsets.Type.ime());
-                view.setPadding(system.left, system.top, system.right, system.bottom);
-                target.post(() -> target.evaluateJavascript(
-                    "document.documentElement.dataset.imeVisible='" + (imeVisible ? "1" : "0") + "';", null));
-            } else {
-                view.setPadding(windowInsets.getSystemWindowInsetLeft(), windowInsets.getSystemWindowInsetTop(),
-                    windowInsets.getSystemWindowInsetRight(), windowInsets.getSystemWindowInsetBottom());
-            }
-            return windowInsets;
+        ViewCompat.setOnApplyWindowInsetsListener(target, (view, insets) -> {
+            Insets system = insets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
+            Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
+            boolean imeVisible = insets.isVisible(WindowInsetsCompat.Type.ime());
+
+            // System/cutout padding is authoritative for the native surface. The
+            // keyboard delta is exported to CSS instead of being added as native
+            // padding too, which avoids the classic adjustResize + IME double inset.
+            view.setPadding(system.left, system.top, system.right, system.bottom);
+            int imeExtra = imeVisible ? Math.max(0, ime.bottom - system.bottom) : 0;
+            target.post(() -> {
+                if (target != webView) return;
+                target.evaluateJavascript(
+                    "(function(){var d=document.documentElement;if(!d)return;" +
+                    "d.dataset.imeVisible='" + (imeVisible ? "1" : "0") + "';" +
+                    "d.style.setProperty('--barsa-safe-left','" + system.left + "px');" +
+                    "d.style.setProperty('--barsa-safe-top','" + system.top + "px');" +
+                    "d.style.setProperty('--barsa-safe-right','" + system.right + "px');" +
+                    "d.style.setProperty('--barsa-safe-bottom','" + system.bottom + "px');" +
+                    "d.style.setProperty('--barsa-ime-bottom','" + imeExtra + "px');" +
+                    "})();", null);
+            });
+            return insets;
         });
-        target.requestApplyInsets();
+        ViewCompat.requestApplyInsets(target);
     }
 
     private void registerBackNavigation() {
@@ -84,9 +96,7 @@ public final class MainActivity extends Activity {
         webView.setBackgroundColor(Color.rgb(2,4,11));
         webView.setOverScrollMode(View.OVER_SCROLL_NEVER); webView.setVerticalScrollBarEnabled(false); webView.setHorizontalScrollBarEnabled(false);
         webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, true);
-        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, true);
         webView.addJavascriptInterface(nativeBridge, "BarsaAndroid");
         webView.setWebViewClient(new WebViewClient() {
             @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
@@ -98,13 +108,24 @@ public final class MainActivity extends Activity {
                 }
                 return true;
             }
+            @Override public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
+                super.onPageStarted(view, url, favicon);
+                if (assetServer != null && !isTrustedAppUri(Uri.parse(url))) {
+                    try { view.removeJavascriptInterface("BarsaAndroid"); } catch (Exception ignored) {}
+                }
+            }
             @Override public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
                 if (!isTrustedAppUri(Uri.parse(url))) return;
+                // Re-add only on the trusted loopback origin. This is idempotent and
+                // ensures a renderer navigation can never retain the native bridge on
+                // an untrusted document.
+                view.addJavascriptInterface(nativeBridge, "BarsaAndroid");
                 android.app.ActivityManager am = (android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE);
                 boolean lowRam = am != null && am.isLowRamDevice();
                 view.evaluateJavascript("document.documentElement.dataset.lowRam='" + (lowRam ? "1" : "0") + "';", null);
                 view.evaluateJavascript("(function(){if(!document.getElementById('barsa-rc16-css')){var l=document.createElement('link');l.id='barsa-rc16-css';l.rel='stylesheet';l.href='/rc16-mobile.css';document.head.appendChild(l)}if(!document.getElementById('barsa-rc16-js')){var s=document.createElement('script');s.id='barsa-rc16-js';s.src='/rc16-mobile.js';s.defer=true;document.head.appendChild(s)}})();", null);
+                ViewCompat.requestApplyInsets(view);
             }
             @Override public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
                 recoverRenderer(detail != null && detail.didCrash());
@@ -158,7 +179,7 @@ public final class MainActivity extends Activity {
 
     @Override protected void onResume() {
         super.onResume();
-        if (webView != null) { webView.onResume(); webView.resumeTimers(); }
+        if (webView != null) { webView.onResume(); webView.resumeTimers(); ViewCompat.requestApplyInsets(webView); }
     }
 
     @Override protected void onPause() {
@@ -168,6 +189,7 @@ public final class MainActivity extends Activity {
 
     @Override public void onTrimMemory(int level) {
         super.onTrimMemory(level);
+        if (nativeAi != null && level >= TRIM_MEMORY_RUNNING_LOW) nativeAi.releaseSessions();
         if (webView == null || level < TRIM_MEMORY_RUNNING_LOW) return;
         final int pressure = level;
         webView.post(() -> webView.evaluateJavascript(
