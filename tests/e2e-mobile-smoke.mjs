@@ -12,7 +12,7 @@ try {
   page.on('pageerror', e => errors.push(e.message));
   page.on('console', m => { if (m.type() === 'error' && !m.text().includes('[W:onnxruntime:')) errors.push(m.text()); });
   await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('#startBtn');
+  await page.waitForSelector('#startBtn', { state: 'attached' });
 
   const required = [
     '#startBtn', '#modelsBtn', '#applySelectedStagesBtn', '#upscaleEnabled',
