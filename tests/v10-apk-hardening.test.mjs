@@ -12,11 +12,13 @@ test('Android 16 build target uses an API-36-compatible Android Gradle plugin', 
   assert.match(rootGradle, /com\.android\.application' version '8\.9\.1'/);
 });
 
-test('APK shell handles Android 16 insets, predictive back, and WebView renderer loss', async () => {
+test('APK shell handles Android 16 compat insets, predictive back, and WebView renderer loss', async () => {
   const activity = await read('android/app/src/main/java/com/barsa/shopi/MainActivity.java');
-  assert.match(activity, /setDecorFitsSystemWindows\(false\)/);
-  assert.match(activity, /WindowInsets\.Type\.systemBars\(\)/);
-  assert.match(activity, /WindowInsets\.Type\.ime\(\)/);
+  assert.match(activity, /WindowCompat\.setDecorFitsSystemWindows\(getWindow\(\), false\)/);
+  assert.match(activity, /ViewCompat\.setOnApplyWindowInsetsListener/);
+  assert.match(activity, /WindowInsetsCompat\.Type\.systemBars\(\)/);
+  assert.match(activity, /WindowInsetsCompat\.Type\.ime\(\)/);
+  assert.match(activity, /WindowInsetsCompat\.Type\.displayCutout\(\)/);
   assert.match(activity, /OnBackInvokedDispatcher\.PRIORITY_DEFAULT/);
   assert.match(activity, /onRenderProcessGone/);
   assert.match(activity, /cancelAllExports\(\)/);
@@ -27,10 +29,11 @@ test('APK shell handles Android 16 insets, predictive back, and WebView renderer
 
 
 test('APK localhost runtime is isolated from external cleartext and framed bridge access', async () => {
-  const [manifest, network, server] = await Promise.all([
+  const [manifest, network, server, activity] = await Promise.all([
     read('android/app/src/main/AndroidManifest.xml'),
     read('android/app/src/main/res/xml/network_security_config.xml'),
     read('android/app/src/main/java/com/barsa/shopi/AssetServer.java'),
+    read('android/app/src/main/java/com/barsa/shopi/MainActivity.java'),
   ]);
   assert.match(manifest, /usesCleartextTraffic="false"/);
   assert.match(manifest, /networkSecurityConfig="@xml\/network_security_config"/);
@@ -40,6 +43,8 @@ test('APK localhost runtime is isolated from external cleartext and framed bridg
   assert.match(server, /X-Frame-Options: DENY/);
   assert.match(server, /X-Content-Type-Options: nosniff/);
   assert.doesNotMatch(server, /Access-Control-Allow-Origin: \*/);
+  assert.match(activity, /isTrustedAppUri/);
+  assert.match(activity, /removeJavascriptInterface\("BarsaAndroid"\)/);
 });
 
 test('native gallery export streams once into a pending MediaStore row and validates exact bytes', async () => {
