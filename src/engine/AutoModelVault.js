@@ -14,6 +14,14 @@ export const AUTO_MODEL_PLAN = Object.freeze([
  * Sequential model provisioning for mobile devices.
  * Large sessions are never loaded together; every model must pass the engine's
  * real runtime self-test before this vault reports it as ready.
+ *
+ * SECURITY/STABILITY INVARIANT:
+ * In an interactive browser/WebView, network provisioning is allowed only while
+ * handling a real user activation. This is deliberately enforced here, at the
+ * model-vault boundary, rather than only in UI code. It prevents boot, idle,
+ * visibility, connectivity, or retry hooks from ever starting hidden multi-MB
+ * model downloads. Node/non-DOM callers remain available for deterministic unit
+ * tests and tooling. Manual local model import does not pass through this vault.
  */
 export class AutoModelVault {
   constructor({ manager, provisioner, registries, onProgress = null } = {}) {
@@ -24,7 +32,28 @@ export class AutoModelVault {
     this.running = null;
   }
 
+  _interactiveProvisioningAllowed() {
+    // No DOM means unit-test/tooling context, not a user-facing runtime.
+    if (typeof globalThis.document === 'undefined') return true;
+    const activation = globalThis.navigator?.userActivation;
+    // Fail closed in browsers that expose no activation state: model downloads
+    // remain available through the explicit per-model install/import controls.
+    return activation?.isActive === true;
+  }
+
   async ensureCore({ includeFace = false, includeAllCatalog = false, forceExtended = false } = {}) {
+    if (!this._interactiveProvisioningAllowed()) {
+      const result = {
+        ok: true,
+        ready: 0,
+        total: 0,
+        results: [],
+        deferred: true,
+        reason: 'user-action-required',
+      };
+      this.onProgress?.({ stage: 'model-deferred', reason: result.reason, label: 'AI models' });
+      return result;
+    }
     if (this.running) return this.running;
     this.running = this._run({ includeFace, includeAllCatalog, forceExtended }).finally(() => { this.running = null; });
     return this.running;
