@@ -1,4 +1,4 @@
-import { CircuitBreaker, defaultRetryable, retryTransient, withTimeout } from './OperationGuard.js';
+import { CircuitBreaker, defaultRetryable, withTimeout } from './OperationGuard.js';
 
 export class ModelAutoProvisioner {
   constructor({ onProgress = null, installTimeoutMs = 180_000 } = {}) {
@@ -27,42 +27,30 @@ export class ModelAutoProvisioner {
     if (installable && typeof engine.installCatalogModel === 'function') {
       const attempts = Math.max(1, Math.min(4, Number(retries) || 1));
       const breaker = this._breaker(`${role}:${modelId}`);
-      try {
-        const installed = await breaker.execute(() => retryTransient(async ({ attempt }) => {
-          const attemptNo = attempt + 1;
-          this.onProgress?.({ role, modelId, stage: 'installing', attempt: attemptNo, attempts });
-          try {
-            await withTimeout(
-              installSignal => engine.installCatalogModel(
-                modelId,
-                progress => this.onProgress?.({ role, modelId, attempt: attemptNo, attempts, ...progress }),
-                { signal: installSignal },
-              ),
-              { timeoutMs: this.installTimeoutMs, label: `model-install:${modelId}`, signal },
-            );
-            const checked = await engine.isAvailable(modelId);
-            if (checked?.available) return { ready: true, modelId, changed: false, installed: true, attempt: attemptNo };
-            const error = new Error(`${modelId} installed but did not become runtime-ready`);
-            error.code = 'MODEL_RUNTIME_NOT_READY';
-            throw error;
-          } catch (error) {
-            installError = error;
-            if (attemptNo < attempts && defaultRetryable(error)) {
-              this.onProgress?.({ role, modelId, stage: 'retry-wait', attempt: attemptNo, attempts, error });
-            }
-            throw error;
-          }
-        }, {
-          attempts,
-          baseDelayMs: 700,
-          maxDelayMs: 6000,
-          jitterMs: 180,
-          signal,
-          isRetryable: isModelProvisionRetryable,
-        }));
-        if (installed?.ready) return installed;
-      } catch (error) {
-        installError = error;
+      for (let attempt = 1; attempt <= attempts; attempt++) {
+        try {
+          this.onProgress?.({ role, modelId, stage: 'installing', attempt, attempts });
+          await breaker.execute(() => withTimeout(
+            installSignal => engine.installCatalogModel(
+              modelId,
+              progress => this.onProgress?.({ role, modelId, attempt, attempts, ...progress }),
+              { signal: installSignal },
+            ),
+            { timeoutMs: this.installTimeoutMs, label: `model-install:${modelId}`, signal },
+          ));
+          const checked = await engine.isAvailable(modelId);
+          if (checked?.available) return { ready: true, modelId, changed: false, installed: true, attempt };
+          installError = new Error(`${modelId} installed but did not become runtime-ready`);
+          installError.code = 'MODEL_RUNTIME_NOT_READY';
+        } catch (error) {
+          installError = error;
+        }
+
+        if (!isModelProvisionRetryable(installError)) break;
+        if (attempt < attempts) {
+          this.onProgress?.({ role, modelId, stage: 'retry-wait', attempt, attempts, error: installError });
+          await waitForRetry(attempt, signal);
+        }
       }
     }
 
@@ -70,7 +58,10 @@ export class ModelAutoProvisioner {
       this.onProgress?.({ role, modelId, stage: 'fallback' });
       try {
         const fallbackId = await withTimeout(
-          fallbackSignal => engine.resolveWorkingModel(progress => this.onProgress?.({ role, requestedModelId: modelId, ...progress }), { signal: fallbackSignal }),
+          fallbackSignal => engine.resolveWorkingModel(
+            progress => this.onProgress?.({ role, requestedModelId: modelId, ...progress }),
+            { signal: fallbackSignal },
+          ),
           { timeoutMs: this.installTimeoutMs, label: `model-fallback:${modelId}`, signal },
         );
         if (fallbackId) {
@@ -110,5 +101,38 @@ function isModelProvisionRetryable(error) {
     'MODEL_RUNTIME_NOT_READY',
     'UNSUPPORTED_CODEC',
   ].includes(error.code)) return false;
-  return defaultRetryable(error) || error?.name === 'TimeoutError';
+  return defaultRetryable(error);
+}
+
+async function waitForRetry(attempt, signal = null) {
+  if (signal?.aborted) throw signal.reason || new DOMException('Aborted', 'AbortError');
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    await new Promise((resolve, reject) => {
+      let settled = false;
+      const finish = (error = null) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        globalThis.removeEventListener?.('online', onOnline);
+        signal?.removeEventListener?.('abort', onAbort);
+        error ? reject(error) : resolve();
+      };
+      const onOnline = () => finish();
+      const onAbort = () => finish(signal.reason || new DOMException('Aborted', 'AbortError'));
+      const timer = setTimeout(finish, 8000);
+      globalThis.addEventListener?.('online', onOnline, { once: true });
+      signal?.addEventListener?.('abort', onAbort, { once: true });
+    });
+  } else {
+    const delayMs = Math.min(6000, 700 * (2 ** Math.max(0, attempt - 1))) + Math.random() * 180;
+    await delay(delayMs, signal);
+  }
+}
+
+function delay(ms, signal = null) {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) return reject(signal.reason || new DOMException('Aborted', 'AbortError'));
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener?.('abort', () => { clearTimeout(timer); reject(signal.reason || new DOMException('Aborted', 'AbortError')); }, { once: true });
+  });
 }
