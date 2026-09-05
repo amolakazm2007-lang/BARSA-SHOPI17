@@ -9,25 +9,20 @@ export async function withTimeout(operation, { timeoutMs = 30_000, label = 'oper
   const controller = new AbortController();
   const onAbort = () => controller.abort(signal.reason || new DOMException('Aborted', 'AbortError'));
   signal?.addEventListener?.('abort', onAbort, { once: true });
-
   let timer = null;
-  let rejectTimeout = null;
   const timeoutError = new DOMException(`${label} timed out after ${timeoutMs}ms`, 'TimeoutError');
   const timeoutPromise = new Promise((_, reject) => {
-    rejectTimeout = reject;
     timer = setTimeout(() => {
       controller.abort(timeoutError);
       reject(timeoutError);
     }, Math.max(1, timeoutMs));
   });
-
   try {
     if (signal?.aborted) throw signal.reason || new DOMException('Aborted', 'AbortError');
     const operationPromise = Promise.resolve().then(() => operation(controller.signal));
     return await Promise.race([operationPromise, timeoutPromise]);
   } finally {
     if (timer != null) clearTimeout(timer);
-    rejectTimeout = null;
     signal?.removeEventListener?.('abort', onAbort);
   }
 }
@@ -58,7 +53,7 @@ export async function retryTransient(operation, {
 export class CircuitBreaker {
   constructor({ failureThreshold = 4, cooldownMs = 30_000 } = {}) {
     this.failureThreshold = Math.max(1, failureThreshold);
-    this.cooldownMs = Math.max(100, cooldownMs);
+    this.cooldownMs = Math.max(1, Number(cooldownMs) || 1);
     this.failures = 0;
     this.openUntil = 0;
     this.state = 'closed';
@@ -94,7 +89,9 @@ export function defaultRetryable(error) {
   if (!error) return false;
   if (error.name === 'AbortError') return false;
   if (error.code === 'MODEL_SHA_MISMATCH' || error.code === 'MODEL_INVALID' || error.code === 'UNSUPPORTED_CODEC') return false;
-  if (error.name === 'TypeError') return true; // fetch/network failures in browsers
+  if (error.name === 'TimeoutError' || error.name === 'TypeError') return true;
   const status = Number(error.status || error.statusCode || 0);
-  return status === 408 || status === 425 || status === 429 || status >= 500;
+  if (status === 408 || status === 425 || status === 429 || status >= 500) return true;
+  const message = String(error.message || '').toLowerCase();
+  return /temporary|network|offline|connection|fetch|timeout|timed out/.test(message);
 }
