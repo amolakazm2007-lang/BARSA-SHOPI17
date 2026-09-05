@@ -7,11 +7,11 @@ const read = (path) => readFile(new URL(path, root), 'utf8');
 
 test('Android build is pinned to Java 17 in source and GitHub Actions', async () => {
   const app = await read('android/app/build.gradle');
-  const workflow = await read('.github/workflows/android-build.yml');
+  const workflow = await read('.github/workflows/build-apk.yml');
   assert.match(app, /sourceCompatibility JavaVersion\.VERSION_17/);
   assert.match(app, /targetCompatibility JavaVersion\.VERSION_17/);
   assert.match(workflow, /java-version: '17'/);
-  assert.match(workflow, /BARSA-SHOPI-v10-RC15\.1-debug/);
+  assert.match(workflow, /BARSA-SHOPI-v10-RC15\.1-FINAL-installable/);
 });
 
 test('audio preservation and audio cleaning are independent real controls', async () => {
