@@ -26,8 +26,10 @@ test('final Android shell is Java 17, v10 FINAL and high-priority hardware WebVi
   assert.match(gradle, /versionCode 1002000/);
   assert.match(gradle, /versionName '10\.0\.0'/);
   assert.match(gradle, /JavaVersion\.VERSION_17/);
-  assert.match(main, /WindowInsets\.Type\.ime\(\)/);
-  assert.match(main, /WindowInsets\.Type\.displayCutout\(\)/);
+  assert.match(main, /WindowCompat\.setDecorFitsSystemWindows\(getWindow\(\), false\)/);
+  assert.match(main, /WindowInsetsCompat\.Type\.systemBars\(\)/);
+  assert.match(main, /WindowInsetsCompat\.Type\.ime\(\)/);
+  assert.match(main, /WindowInsetsCompat\.Type\.displayCutout\(\)/);
   assert.match(main, /LAYER_TYPE_HARDWARE/);
   assert.match(main, /RENDERER_PRIORITY_IMPORTANT/);
 });
