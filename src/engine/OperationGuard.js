@@ -1,18 +1,33 @@
 const sleep = (ms, signal) => new Promise((resolve, reject) => {
   if (signal?.aborted) return reject(signal.reason || new DOMException('Aborted', 'AbortError'));
   const timer = setTimeout(resolve, ms);
-  signal?.addEventListener?.('abort', () => { clearTimeout(timer); reject(signal.reason || new DOMException('Aborted', 'AbortError')); }, { once: true });
+  const onAbort = () => { clearTimeout(timer); reject(signal.reason || new DOMException('Aborted', 'AbortError')); };
+  signal?.addEventListener?.('abort', onAbort, { once: true });
 });
 
 export async function withTimeout(operation, { timeoutMs = 30_000, label = 'operation', signal = null } = {}) {
   const controller = new AbortController();
   const onAbort = () => controller.abort(signal.reason || new DOMException('Aborted', 'AbortError'));
   signal?.addEventListener?.('abort', onAbort, { once: true });
-  const timer = setTimeout(() => controller.abort(new DOMException(`${label} timed out after ${timeoutMs}ms`, 'TimeoutError')), Math.max(1, timeoutMs));
+
+  let timer = null;
+  let rejectTimeout = null;
+  const timeoutError = new DOMException(`${label} timed out after ${timeoutMs}ms`, 'TimeoutError');
+  const timeoutPromise = new Promise((_, reject) => {
+    rejectTimeout = reject;
+    timer = setTimeout(() => {
+      controller.abort(timeoutError);
+      reject(timeoutError);
+    }, Math.max(1, timeoutMs));
+  });
+
   try {
-    return await operation(controller.signal);
+    if (signal?.aborted) throw signal.reason || new DOMException('Aborted', 'AbortError');
+    const operationPromise = Promise.resolve().then(() => operation(controller.signal));
+    return await Promise.race([operationPromise, timeoutPromise]);
   } finally {
-    clearTimeout(timer);
+    if (timer != null) clearTimeout(timer);
+    rejectTimeout = null;
     signal?.removeEventListener?.('abort', onAbort);
   }
 }
