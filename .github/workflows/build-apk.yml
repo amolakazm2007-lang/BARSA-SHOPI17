@@ -81,6 +81,7 @@ jobs:
             npm run final:audit
             npm run check:packaging
             npm run check:release-invariants
+            npm audit --omit=dev --audit-level=critical
             npm audit --omit=dev --audit-level=moderate --json > reports/npm-audit.json
           } 2>&1 | tee reports/release-gates.log
 
