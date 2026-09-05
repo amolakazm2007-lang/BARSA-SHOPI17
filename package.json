@@ -1,0 +1,36 @@
+{
+  "name": "video-toolkit-pro",
+  "version": "10.0.0-rc15.1",
+  "private": true,
+  "type": "module",
+  "description": "BARSA SHOPI professional Android AI video enhancement engine with native ONNX acceleration, temporal processing, blur studio and MP4 export.",
+  "scripts": {
+    "prepare:runtime": "node scripts/copy-runtime-assets.mjs",
+    "dev": "npm run prepare:runtime && vite",
+    "build": "npm run prepare:runtime && vite build",
+    "preview": "vite preview",
+    "test": "node --test --test-concurrency=1 tests/*.test.mjs",
+    "test:browser": "node tests/e2e-v3.mjs",
+    "check": "node scripts/check-source.mjs",
+    "final:audit": "node scripts/final-audit.mjs",
+    "android:sync": "npm run build && node scripts/sync-android.mjs",
+    "android:assemble": "npm run android:sync && cd android && gradle assembleDebug",
+    "verify:runtime": "node scripts/verify-runtime-assets.mjs",
+    "check:packaging": "node scripts/check-packaging.mjs"
+  },
+  "dependencies": {
+    "@ffmpeg/core": "0.12.10",
+    "@ffmpeg/core-mt": "0.12.10",
+    "@ffmpeg/ffmpeg": "0.12.15",
+    "@ffmpeg/util": "0.12.2",
+    "mediabunny": "1.55.5",
+    "onnxruntime-web": "1.22.0"
+  },
+  "devDependencies": {
+    "playwright": "1.55.0",
+    "vite": "6.1.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

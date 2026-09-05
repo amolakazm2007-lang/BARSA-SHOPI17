@@ -1,0 +1,29 @@
+# BARSA SHOPI v9.0 — Final Release Checklist
+
+- [x] Web version = 9.0.0
+- [x] package-lock version = 9.0.0
+- [x] Android versionCode = 90
+- [x] Android versionName = 9.0.0
+- [x] GitHub artifact names = v9.0
+- [x] Java 17
+- [x] ONNX Runtime Android wired
+- [x] Manual model selection enforced at render time
+- [x] Background model provisioning blocked during active work/render
+- [x] Frame Integrity strict
+- [x] Encoder packet accounting
+- [x] Encoder back-pressure
+- [x] OPFS write back-pressure
+- [x] Native MP4 recovery fallback
+- [x] FFmpeg cleanup
+- [x] Temporal/Stabilization cleanup
+- [x] Resilience reset per job
+- [x] Blur-only isolation
+- [x] Arabic UI + Help Center
+- [x] Source Policy PASS
+- [x] Final Audit PASS
+- [x] UI Audit PASS
+- [x] v9 tests 5/5 PASS
+- [ ] GitHub npm ci + complete 152-test run
+- [ ] Android Gradle APK build on GitHub
+- [ ] POCO F6 Device Acceptance
+- [ ] Signed Release APK

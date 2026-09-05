@@ -1,0 +1,93 @@
+name: BARSA SHOPI Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'src/**'
+      - 'public/**'
+      - 'android/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/android-build.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install web dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Verify runtime assets
+        run: npm run prepare:runtime && npm run verify:runtime
+
+      - name: Test engine
+        run: npm test
+
+      - name: Install Chromium for end-to-end verification
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser render and mobile UI verification
+        run: npm run test:browser
+
+      - name: Audit source
+        run: |
+          npm run check
+          npm run check:packaging
+          npm run final:audit
+
+      - name: Build web runtime
+        run: npm run build
+
+      - name: Sync Android assets
+        run: node scripts/sync-android.mjs
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android 16 SDK
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Android lint, unit tests and debug APK
+        working-directory: android
+        run: gradle --no-daemon :app:lintDebug :app:testDebugUnitTest :app:assembleDebug
+
+      - name: Verify APK integrity
+        working-directory: android
+        run: |
+          APK=app/build/outputs/apk/debug/app-debug.apk
+          test -s "$APK"
+          APKSIGNER=$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)
+          test -n "$APKSIGNER"
+          "$APKSIGNER" verify --verbose "$APK"
+          sha256sum "$APK"
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: BARSA-SHOPI-v10-RC15.1-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          retention-days: 14

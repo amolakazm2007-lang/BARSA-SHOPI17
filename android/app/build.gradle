@@ -1,0 +1,31 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'com.barsa.shopi'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'com.barsa.shopi'
+        minSdk 29
+        targetSdk 36
+        versionCode 1001501
+        versionName '10.0.0-rc15.1'
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+
+
+dependencies {
+    implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.22.0'
+}

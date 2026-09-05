@@ -1,0 +1,24 @@
+{
+  "name": "برسا شوبي · Barsa Shopi",
+  "short_name": "برسا شوبي",
+  "description": "محرك شخصي محلي لتحسين الفيديو بالذكاء الاصطناعي والرندر عالي الجودة.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#050713",
+  "theme_color": "#050713",
+  "orientation": "portrait-primary",
+  "categories": [
+    "photo",
+    "video",
+    "utilities"
+  ],
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

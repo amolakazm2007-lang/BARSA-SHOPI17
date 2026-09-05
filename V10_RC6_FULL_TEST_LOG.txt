@@ -1,0 +1,1417 @@
+TAP version 13
+# Subtest: A/V sync accepts bounded decoded-audio drift
+ok 1 - A/V sync accepts bounded decoded-audio drift
+  ---
+  duration_ms: 0.842511
+  type: 'test'
+  ...
+# Subtest: A/V sync rejects large decoded-audio drift
+ok 2 - A/V sync rejects large decoded-audio drift
+  ---
+  duration_ms: 0.593524
+  type: 'test'
+  ...
+# Subtest: A/V sync reports indirect validation when exact audio timeline is unavailable
+ok 3 - A/V sync reports indirect validation when exact audio timeline is unavailable
+  ---
+  duration_ms: 0.134788
+  type: 'test'
+  ...
+# Subtest: exposure raises luminance while negative highlights recover it
+ok 4 - exposure raises luminance while negative highlights recover it
+  ---
+  duration_ms: 3.250176
+  type: 'test'
+  ...
+# Subtest: vignette darkens corners more than the center
+ok 5 - vignette darkens corners more than the center
+  ---
+  duration_ms: 0.350752
+  type: 'test'
+  ...
+# Subtest: sanitizeFileName keeps mp4 extension and removes unsafe characters
+ok 6 - sanitizeFileName keeps mp4 extension and removes unsafe characters
+  ---
+  duration_ms: 0.855671
+  type: 'test'
+  ...
+# Subtest: Android shell exposes file chooser, chunked MP4 MediaStore export, and keep-screen-on
+ok 7 - Android shell exposes file chooser, chunked MP4 MediaStore export, and keep-screen-on
+  ---
+  duration_ms: 5.962247
+  type: 'test'
+  ...
+# Subtest: Blur Studio provides a dedicated blur-only MP4 action
+ok 8 - Blur Studio provides a dedicated blur-only MP4 action
+  ---
+  duration_ms: 4.983939
+  type: 'test'
+  ...
+# Subtest: streaming audio processing is bounded and preserves timestamps
+ok 9 - streaming audio processing is bounded and preserves timestamps
+  ---
+  duration_ms: 4.186469
+  type: 'test'
+  ...
+# Subtest: auto-fix raises dark frames
+ok 10 - auto-fix raises dark frames
+  ---
+  duration_ms: 6.642936
+  type: 'test'
+  ...
+# Subtest: auto-fix detects portrait pixels
+ok 11 - auto-fix detects portrait pixels
+  ---
+  duration_ms: 4.231226
+  type: 'test'
+  ...
+# Subtest: auto model vault installs core models sequentially and skips huge face model by default
+ok 12 - auto model vault installs core models sequentially and skips huge face model by default
+  ---
+  duration_ms: 6.805949
+  type: 'test'
+  ...
+# Subtest: full vault includes face restoration and keeps going after one model fails
+ok 13 - full vault includes face restoration and keeps going after one model fails
+  ---
+  duration_ms: 4.856511
+  type: 'test'
+  ...
+# Subtest: automatic catalog exposes real downloadable ONNX candidates for primary AI models
+ok 14 - automatic catalog exposes real downloadable ONNX candidates for primary AI models
+  ---
+  duration_ms: 0.822943
+  type: 'test'
+  ...
+# Subtest: candidate installer falls through failed mirrors and keeps verification config
+ok 15 - candidate installer falls through failed mirrors and keeps verification config
+  ---
+  duration_ms: 0.422625
+  type: 'test'
+  ...
+# Subtest: Blur keeps final and internal frame rates independent
+ok 16 - Blur keeps final and internal frame rates independent
+  ---
+  duration_ms: 0.874302
+  type: 'test'
+  ...
+# Subtest: Same as Source resolves against source metadata
+ok 17 - Same as Source resolves against source metadata
+  ---
+  duration_ms: 0.229858
+  type: 'test'
+  ...
+# Subtest: valid .cube data is parsed and trilinearly sampled
+ok 18 - valid .cube data is parsed and trilinearly sampled
+  ---
+  duration_ms: 1.684531
+  type: 'test'
+  ...
+# Subtest: malformed LUTs and curves fail closed
+ok 19 - malformed LUTs and curves fail closed
+  ---
+  duration_ms: 1.743423
+  type: 'test'
+  ...
+# Subtest: curve and color controls modify real pixel values
+ok 20 - curve and color controls modify real pixel values
+  ---
+  duration_ms: 7.278387
+  type: 'test'
+  ...
+# Subtest: MP4 validator recognizes Fast Start order
+ok 21 - MP4 validator recognizes Fast Start order
+  ---
+  duration_ms: 1.709897
+  type: 'test'
+  ...
+# Subtest: MP4 validator rejects missing ftyp and reports non-fast-start order
+ok 22 - MP4 validator rejects missing ftyp and reports non-fast-start order
+  ---
+  duration_ms: 0.399886
+  type: 'test'
+  ...
+# Subtest: MP4 track validator enforces H.264 and AAC presence
+ok 23 - MP4 track validator enforces H.264 and AAC presence
+  ---
+  duration_ms: 1.789705
+  type: 'test'
+  ...
+# Subtest: MP4 remux converts IVF to H.264 yuv420p and writes fast-start metadata
+ok 24 - MP4 remux converts IVF to H.264 yuv420p and writes fast-start metadata
+  ---
+  duration_ms: 4.885487
+  type: 'test'
+  ...
+# Subtest: FFmpeg transcode removes audio when the user disables it
+ok 25 - FFmpeg transcode removes audio when the user disables it
+  ---
+  duration_ms: 0.654395
+  type: 'test'
+  ...
+# Subtest: YuNet decoder converts stride predictions into a face and landmarks
+ok 26 - YuNet decoder converts stride predictions into a face and landmarks
+  ---
+  duration_ms: 1.830061
+  type: 'test'
+  ...
+# Subtest: YuNet decoder rejects incomplete model exports
+ok 27 - YuNet decoder rejects incomplete model exports
+  ---
+  duration_ms: 0.400526
+  type: 'test'
+  ...
+# Subtest: YuNet signature accepts fixed NCHW and rejects invalid channels
+ok 28 - YuNet signature accepts fixed NCHW and rejects invalid channels
+  ---
+  duration_ms: 1.216993
+  type: 'test'
+  ...
+# Subtest: face signature supports GFPGAN image-only exports
+ok 29 - face signature supports GFPGAN image-only exports
+  ---
+  duration_ms: 1.444985
+  type: 'test'
+  ...
+# Subtest: face signature supports CodeFormer fidelity-weight input in any order
+ok 30 - face signature supports CodeFormer fidelity-weight input in any order
+  ---
+  duration_ms: 0.572855
+  type: 'test'
+  ...
+# Subtest: face signature rejects unknown auxiliary inputs instead of guessing
+ok 31 - face signature rejects unknown auxiliary inputs instead of guessing
+  ---
+  duration_ms: 0.453126
+  type: 'test'
+  ...
+# Subtest: face boxes are temporally stabilized and unmatched detections are kept
+ok 32 - face boxes are temporally stabilized and unmatched detections are kept
+  ---
+  duration_ms: 0.575215
+  type: 'test'
+  ...
+# Subtest: face roll uses eye landmarks and clamps extreme angles
+ok 33 - face roll uses eye landmarks and clamps extreme angles
+  ---
+  duration_ms: 0.322424
+  type: 'test'
+  ...
+# Subtest: frame pacing accepts rounded CFR timestamps without storing the timeline
+ok 34 - frame pacing accepts rounded CFR timestamps without storing the timeline
+  ---
+  duration_ms: 2.039578
+  type: 'test'
+  ...
+# Subtest: frame pacing rejects duplicate and missing timestamps
+ok 35 - frame pacing rejects duplicate and missing timestamps
+  ---
+  duration_ms: 0.791516
+  type: 'test'
+  ...
+# FrameSequencer: ordering
+#   PASS factor=2, 5 frames
+#   PASS factor=4, 3 frames
+#   PASS 1 frame, nothing to interpolate
+#   PASS 0 frames
+# FrameSequencer: frame count formula (N-1)*factor + 1
+#   PASS N=5 factor=2
+#   PASS N=10 factor=2
+#   PASS N=3 factor=4
+#   PASS N=30 factor=2
+#   PASS N=30 factor=4
+# FrameSequencer: rejects unsupported factors
+#   PASS: factor=3 correctly rejected
+# FrameSequencer: execution against mock data + memory discipline
+#   PASS emitted sequence matches source order + generated frames
+#   PASS every source frame fetched exactly once (caching works)
+# ALL PASS
+# Subtest: tests/FrameSequencer.test.mjs
+ok 16 - tests/FrameSequencer.test.mjs
+  ---
+  duration_ms: 45.323371
+  type: 'test'
+  ...
+# Subtest: resolution presets use the short edge for landscape and portrait
+ok 37 - resolution presets use the short edge for landscape and portrait
+  ---
+  duration_ms: 1.888622
+  type: 'test'
+  ...
+# Subtest: social aspect ratios and arbitrary custom dimensions stay encoder-even
+ok 38 - social aspect ratios and arbitrary custom dimensions stay encoder-even
+  ---
+  duration_ms: 1.221051
+  type: 'test'
+  ...
+# Subtest: contain adds bars while cover crops without stretching
+ok 39 - contain adds bars while cover crops without stretching
+  ---
+  duration_ms: 0.22485
+  type: 'test'
+  ...
+# Subtest: FFmpeg geometry graph mirrors Canvas contain and cover behavior
+ok 40 - FFmpeg geometry graph mirrors Canvas contain and cover behavior
+  ---
+  duration_ms: 0.305702
+  type: 'test'
+  ...
+# Subtest: dimensions above the browser safety limit are rejected
+ok 41 - dimensions above the browser safety limit are rejected
+  ---
+  duration_ms: 0.483214
+  type: 'test'
+  ...
+# Subtest: AI working canvas stays bounded for 4K source with a fixed x3 model
+ok 42 - AI working canvas stays bounded for 4K source with a fixed x3 model
+  ---
+  duration_ms: 0.441905
+  type: 'test'
+  ...
+# Subtest: POCO F6 model code activates the tuned mobile profile
+ok 43 - POCO F6 model code activates the tuned mobile profile
+  ---
+  duration_ms: 0.989598
+  type: 'test'
+  ...
+# Subtest: strong unknown Android remains adaptive instead of being mislabeled POCO F6
+ok 44 - strong unknown Android remains adaptive instead of being mislabeled POCO F6
+  ---
+  duration_ms: 0.231493
+  type: 'test'
+  ...
+# Subtest: H.264 candidates use levels suitable for 1080p60 and 4K60
+ok 45 - H.264 candidates use levels suitable for 1080p60 and 4K60
+  ---
+  duration_ms: 0.860365
+  type: 'test'
+  ...
+# Subtest: device acceptance requires H.264 and OPFS core paths
+ok 46 - device acceptance requires H.264 and OPFS core paths
+  ---
+  duration_ms: 0.322074
+  type: 'test'
+  ...
+# Subtest: container probe reads real WebM dimensions, timing and codec
+not ok 47 - container probe reads real WebM dimensions, timing and codec
+  ---
+  duration_ms: 5.40701
+  type: 'test'
+  location: '/mnt/data/barsa_rc5/barsa_final_v981/tests/MediaInputEngine.test.mjs:6:1'
+  failureType: 'testCodeFailure'
+  error: "Cannot find package 'mediabunny' imported from /mnt/data/barsa_rc5/barsa_final_v981/src/engine/MediaInputEngine.js"
+  code: 'ERR_MODULE_NOT_FOUND'
+  stack: |-
+    Object.getPackageJSONURL (node:internal/modules/package_json_reader:256:9)
+    packageResolve (node:internal/modules/esm/resolve:768:81)
+    moduleResolve (node:internal/modules/esm/resolve:854:18)
+    defaultResolve (node:internal/modules/esm/resolve:984:11)
+    ModuleLoader.defaultResolve (node:internal/modules/esm/loader:780:12)
+    #cachedDefaultResolve (node:internal/modules/esm/loader:704:25)
+    ModuleLoader.resolve (node:internal/modules/esm/loader:687:38)
+    ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:305:38)
+    onImport.tracePromise.__proto__ (node:internal/modules/esm/loader:643:36)
+    TracingChannel.tracePromise (node:diagnostics_channel:344:14)
+  ...
+# Subtest: keeps an already verified model without reinstalling
+ok 48 - keeps an already verified model without reinstalling
+  ---
+  duration_ms: 1.013365
+  type: 'test'
+  ...
+# Subtest: automatically installs and verifies a catalog model
+ok 49 - automatically installs and verifies a catalog model
+  ---
+  duration_ms: 0.362555
+  type: 'test'
+  ...
+# Subtest: switches to a runtime-verified fallback when primary install fails
+ok 50 - switches to a runtime-verified fallback when primary install fails
+  ---
+  duration_ms: 2105.124371
+  type: 'test'
+  ...
+# Upscale model candidate "onnx-model-zoo-sr-x3" failed, trying next in chain: simulated bundled digest failure
+# Upscale model candidate "onnx-model-zoo-sr-x3" failed, trying next in chain: bundled install failed
+# Upscale model candidate "real-esrgan-x4plus" failed, trying next in chain: manual model absent
+# Upscale model candidate "real-esrgan-compatible-x4" failed, trying next in chain: manual model absent
+# Upscale model candidate "real-esrgan-x8-facefusion" failed, trying next in chain: manual model absent
+# All upscale model candidates failed: onnx-model-zoo-sr-x3: bundled install failed | real-esrgan-x4plus: manual model absent | real-esrgan-compatible-x4: manual model absent | real-esrgan-x8-facefusion: manual model absent
+# Upscale model candidate "onnx-model-zoo-sr-x3" failed, trying next in chain: bad output shape
+# RIFE model candidate "rife-compatible" failed, trying next in chain: first failed
+# Subtest: upscale fallback stops at the first already-installed model
+ok 51 - upscale fallback stops at the first already-installed model
+  ---
+  duration_ms: 1.550455
+  type: 'test'
+  ...
+# Subtest: upscale fallback installs the bundled candidate then uses a verified fallback
+ok 52 - upscale fallback installs the bundled candidate then uses a verified fallback
+  ---
+  duration_ms: 1.135766
+  type: 'test'
+  ...
+# Subtest: upscale fallback never reports success if every candidate fails
+ok 53 - upscale fallback never reports success if every candidate fails
+  ---
+  duration_ms: 0.484319
+  type: 'test'
+  ...
+# Subtest: upscale fallback rejects a model that downloads but fails inference
+ok 54 - upscale fallback rejects a model that downloads but fails inference
+  ---
+  duration_ms: 0.386554
+  type: 'test'
+  ...
+# Subtest: RIFE retains its independent fallback contract
+ok 55 - RIFE retains its independent fallback contract
+  ---
+  duration_ms: 0.416936
+  type: 'test'
+  ...
+# Subtest: remote model install accepts only audited HTTPS hosts and streams progress
+ok 56 - remote model install accepts only audited HTTPS hosts and streams progress
+  ---
+  duration_ms: 41.406201
+  type: 'test'
+  ...
+# Subtest: motion blur sample count follows internal/output FPS and amount
+ok 57 - motion blur sample count follows internal/output FPS and amount
+  ---
+  duration_ms: 0.786262
+  type: 'test'
+  ...
+# Subtest: all supported blur weighting modes are normalized
+ok 58 - all supported blur weighting modes are normalized
+  ---
+  duration_ms: 2.521533
+  type: 'test'
+  ...
+# Subtest: frame signatures distinguish duplicate and unrelated frames
+ok 59 - frame signatures distinguish duplicate and unrelated frames
+  ---
+  duration_ms: 1.433848
+  type: 'test'
+  ...
+# node:internal/modules/package_json_reader:256
+#   throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+#         ^
+# Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'mediabunny' imported from /mnt/data/barsa_rc5/barsa_final_v981/tests/NativeMP4Muxer.test.mjs
+#     at Object.getPackageJSONURL (node:internal/modules/package_json_reader:256:9)
+#     at packageResolve (node:internal/modules/esm/resolve:768:81)
+#     at moduleResolve (node:internal/modules/esm/resolve:854:18)
+#     at defaultResolve (node:internal/modules/esm/resolve:984:11)
+#     at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:780:12)
+#     at \#cachedDefaultResolve (node:internal/modules/esm/loader:704:25)
+#     at ModuleLoader.resolve (node:internal/modules/esm/loader:687:38)
+#     at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:305:38)
+#     at ModuleJob._link (node:internal/modules/esm/module_job:137:49) {
+#   code: 'ERR_MODULE_NOT_FOUND'
+# }
+# Node.js v22.16.0
+# Subtest: tests/NativeMP4Muxer.test.mjs
+not ok 24 - tests/NativeMP4Muxer.test.mjs
+  ---
+  duration_ms: 48.072349
+  type: 'test'
+  location: '/mnt/data/barsa_rc5/barsa_final_v981/tests/NativeMP4Muxer.test.mjs:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# Subtest: accepts a complete NCNN param header
+ok 61 - accepts a complete NCNN param header
+  ---
+  duration_ms: 1.319098
+  type: 'test'
+  ...
+# Subtest: rejects wrong magic and truncated NCNN params
+ok 62 - rejects wrong magic and truncated NCNN params
+  ---
+  duration_ms: 0.196078
+  type: 'test'
+  ...
+# Subtest: production automatic model metadata is pinned by hash and exact byte size
+ok 63 - production automatic model metadata is pinned by hash and exact byte size
+  ---
+  duration_ms: 1.016861
+  type: 'test'
+  ...
+# Subtest: Quality Lab OFF is a complete stage bypass
+ok 64 - Quality Lab OFF is a complete stage bypass
+  ---
+  duration_ms: 1.088716
+  type: 'test'
+  ...
+# Subtest: quality pipeline separates cleanup, temporal, and finishing stages
+ok 65 - quality pipeline separates cleanup, temporal, and finishing stages
+  ---
+  duration_ms: 1.509045
+  type: 'test'
+  ...
+# Subtest: Smart Enhance enables useful processors instead of every processor
+ok 66 - Smart Enhance enables useful processors instead of every processor
+  ---
+  duration_ms: 0.527573
+  type: 'test'
+  ...
+# Subtest: general frame analysis returns bounded technical metrics
+ok 67 - general frame analysis returns bounded technical metrics
+  ---
+  duration_ms: 0.940075
+  type: 'test'
+  ...
+# Subtest: quality metrics detect fully clipped output
+ok 68 - quality metrics detect fully clipped output
+  ---
+  duration_ms: 2.027328
+  type: 'test'
+  ...
+# Subtest: quality metrics keep a neutral midtone frame clean
+ok 69 - quality metrics keep a neutral midtone frame clean
+  ---
+  duration_ms: 1.882766
+  type: 'test'
+  ...
+# Subtest: RIFE adapter recognizes dual-image plus timestep signatures
+ok 70 - RIFE adapter recognizes dual-image plus timestep signatures
+  ---
+  duration_ms: 1.722413
+  type: 'test'
+  ...
+# Subtest: RIFE adapter recognizes concatenated six-channel inputs with scale
+ok 71 - RIFE adapter recognizes concatenated six-channel inputs with scale
+  ---
+  duration_ms: 0.713665
+  type: 'test'
+  ...
+# Subtest: RIFE adapter rejects unknown auxiliary tensors
+ok 72 - RIFE adapter rejects unknown auxiliary tensors
+  ---
+  duration_ms: 0.70347
+  type: 'test'
+  ...
+# Subtest: preview processor changes pixels and preserves alpha
+ok 73 - preview processor changes pixels and preserves alpha
+  ---
+  duration_ms: 2.650949
+  type: 'test'
+  ...
+# Subtest: FFmpeg render fallback maps every visible effect family
+ok 74 - FFmpeg render fallback maps every visible effect family
+  ---
+  duration_ms: 1.177851
+  type: 'test'
+  ...
+# Subtest: AI and 4K increase render estimate
+ok 75 - AI and 4K increase render estimate
+  ---
+  duration_ms: 0.827548
+  type: 'test'
+  ...
+# Subtest: formats duration
+ok 76 - formats duration
+  ---
+  duration_ms: 0.164036
+  type: 'test'
+  ...
+# Subtest: scene detector identifies a hard cut
+ok 77 - scene detector identifies a hard cut
+  ---
+  duration_ms: 2.046387
+  type: 'test'
+  ...
+# Subtest: scene detector ignores a small exposure drift
+ok 78 - scene detector ignores a small exposure drift
+  ---
+  duration_ms: 1.184958
+  type: 'test'
+  ...
+# Subtest: scene detector validates matching buffers
+ok 79 - scene detector validates matching buffers
+  ---
+  duration_ms: 0.430796
+  type: 'test'
+  ...
+# Skin-tone smoothing algorithm validation (pure-JS port of the WGSL logic):
+#   PASS noise variance in skin area drops significantly (134.2 -> 33.9)
+#   PASS non-skin (blue) area is untouched (0.00 -> 0.00)
+#   PASS eyebrow edge line stays dark/sharp after smoothing (R=30.0, was 30)
+# ALL PASS
+# NOTE: this validates the ALGORITHM. The WGSL shader itself still needs
+# live-GPU verification on stable hardware -- this sandbox's WebGPU is too
+# unstable (documented, real device-loss issue) to trust a pixel readback here.
+# Subtest: tests/SkinSmoothAlgorithm.test.mjs
+ok 34 - tests/SkinSmoothAlgorithm.test.mjs
+  ---
+  duration_ms: 46.809784
+  type: 'test'
+  ...
+# node:internal/modules/package_json_reader:256
+#   throw new ERR_MODULE_NOT_FOUND(packageName, fileURLToPath(base), null);
+#         ^
+# Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'playwright' imported from /mnt/data/barsa_rc5/barsa_final_v981/tests/StorageManager.test.mjs
+#     at Object.getPackageJSONURL (node:internal/modules/package_json_reader:256:9)
+#     at packageResolve (node:internal/modules/esm/resolve:768:81)
+#     at moduleResolve (node:internal/modules/esm/resolve:854:18)
+#     at defaultResolve (node:internal/modules/esm/resolve:984:11)
+#     at ModuleLoader.defaultResolve (node:internal/modules/esm/loader:780:12)
+#     at \#cachedDefaultResolve (node:internal/modules/esm/loader:704:25)
+#     at ModuleLoader.resolve (node:internal/modules/esm/loader:687:38)
+#     at ModuleLoader.getModuleJobForImport (node:internal/modules/esm/loader:305:38)
+#     at ModuleJob._link (node:internal/modules/esm/module_job:137:49) {
+#   code: 'ERR_MODULE_NOT_FOUND'
+# }
+# Node.js v22.16.0
+# Subtest: tests/StorageManager.test.mjs
+not ok 35 - tests/StorageManager.test.mjs
+  ---
+  duration_ms: 37.833968
+  type: 'test'
+  location: '/mnt/data/barsa_rc5/barsa_final_v981/tests/StorageManager.test.mjs:1:1'
+  failureType: 'testCodeFailure'
+  exitCode: 1
+  signal: ~
+  error: 'test failed'
+  code: 'ERR_TEST_FAILURE'
+  ...
+# Subtest: streaming SHA-256 matches standard vectors across chunk boundaries
+ok 82 - streaming SHA-256 matches standard vectors across chunk boundaries
+  ---
+  duration_ms: 8.879791
+  type: 'test'
+  ...
+# Subtest: temporal denoise blends static frames but rejects motion and scene cuts
+ok 83 - temporal denoise blends static frames but rejects motion and scene cuts
+  ---
+  duration_ms: 1.75389
+  type: 'test'
+  ...
+# Subtest: anti-flicker correction is bounded and disabled on strong motion
+ok 84 - anti-flicker correction is bounded and disabled on strong motion
+  ---
+  duration_ms: 0.44439
+  type: 'test'
+  ...
+# Subtest: sample difference uses normalized luma rather than RGB byte distance
+ok 85 - sample difference uses normalized luma rather than RGB byte distance
+  ---
+  duration_ms: 0.218897
+  type: 'test'
+  ...
+# TileProcessor: tile layout coverage + partition-of-unity blend weights
+#   PASS 1280x720 tile=256 overlap=12: tiles=18 uncovered=0 weightSum=[1.0000, 1.0000]
+#   PASS 3840x2160 tile=384 overlap=16: tiles=66 uncovered=0 weightSum=[1.0000, 1.0000]
+#   PASS 100x100 tile=64 overlap=8: tiles=4 uncovered=0 weightSum=[1.0000, 1.0000]
+#   PASS 65x33 tile=32 overlap=4: tiles=6 uncovered=0 weightSum=[1.0000, 1.0000]
+#   PASS 1000x1000 tile=128 overlap=0: tiles=64 uncovered=0 weightSum=[1.0000, 1.0000]
+# ALL PASS
+# Subtest: tests/TileProcessor.test.mjs
+ok 38 - tests/TileProcessor.test.mjs
+  ---
+  duration_ms: 461.994546
+  type: 'test'
+  ...
+# Subtest: mobile luminance pipeline preserves chroma while replacing detail luminance
+ok 87 - mobile luminance pipeline preserves chroma while replacing detail luminance
+  ---
+  duration_ms: 1.391851
+  type: 'test'
+  ...
+# Subtest: fixed-input ONNX tiles are edge padded then cropped to real tile geometry
+ok 88 - fixed-input ONNX tiles are edge padded then cropped to real tile geometry
+  ---
+  duration_ms: 1.24415
+  type: 'test'
+  ...
+# Subtest: wraps IVF as WebM
+ok 89 - wraps IVF as WebM
+  ---
+  duration_ms: 4.145762
+  type: 'test'
+  ...
+# Subtest: extended model download is allowed with enough storage
+ok 90 - extended model download is allowed with enough storage
+  ---
+  duration_ms: 0.777584
+  type: 'test'
+  ...
+# Subtest: extended model download defers on data saver
+ok 91 - extended model download defers on data saver
+  ---
+  duration_ms: 0.150781
+  type: 'test'
+  ...
+# Subtest: extended model download defers when free storage is unsafe
+ok 92 - extended model download defers when free storage is unsafe
+  ---
+  duration_ms: 0.119253
+  type: 'test'
+  ...
+# Subtest: manual full download can override smart deferral
+ok 93 - manual full download can override smart deferral
+  ---
+  duration_ms: 1.062644
+  type: 'test'
+  ...
+# Subtest: model provisioner retries transient install failures and verifies readiness
+ok 94 - model provisioner retries transient install failures and verifies readiness
+  ---
+  duration_ms: 710.796241
+  type: 'test'
+  ...
+# Subtest: final Android shell is Java 17, v9.8.1 and high-priority hardware WebView
+ok 95 - final Android shell is Java 17, v9.8.1 and high-priority hardware WebView
+  ---
+  duration_ms: 5.323528
+  type: 'test'
+  ...
+# Subtest: auto selector picks verified Real-ESRGAN when upscale is required
+ok 96 - auto selector picks verified Real-ESRGAN when upscale is required
+  ---
+  duration_ms: 0.981459
+  type: 'test'
+  ...
+# Subtest: auto selector requests RIFE only when real FPS increase is needed
+ok 97 - auto selector requests RIFE only when real FPS increase is needed
+  ---
+  duration_ms: 0.247752
+  type: 'test'
+  ...
+# Subtest: auto selector uses face model only when face restoration is requested
+ok 98 - auto selector uses face model only when face restoration is requested
+  ---
+  duration_ms: 0.18842
+  type: 'test'
+  ...
+# Subtest: Temporal Master maps to all three real temporal passes
+ok 99 - Temporal Master maps to all three real temporal passes
+  ---
+  duration_ms: 1.136459
+  type: 'test'
+  ...
+# Subtest: model selection stays manual while All Engine Boost is wired
+ok 100 - model selection stays manual while All Engine Boost is wired
+  ---
+  duration_ms: 0.309082
+  type: 'test'
+  ...
+# Subtest: v10 Android forwards OS memory pressure to the web runtime
+ok 101 - v10 Android forwards OS memory pressure to the web runtime
+  ---
+  duration_ms: 7.065722
+  type: 'test'
+  ...
+# Subtest: native audio timeline uses Mediabunny seconds, not WebCodecs microseconds
+ok 102 - native audio timeline uses Mediabunny seconds, not WebCodecs microseconds
+  ---
+  duration_ms: 1.219408
+  type: 'test'
+  ...
+# Subtest: native audio rejects backwards timestamps so pipeline can fall back safely
+ok 103 - native audio rejects backwards timestamps so pipeline can fall back safely
+  ---
+  duration_ms: 0.59202
+  type: 'test'
+  ...
+# Subtest: native audio rejects empty decoded track
+ok 104 - native audio rejects empty decoded track
+  ---
+  duration_ms: 0.18293
+  type: 'test'
+  ...
+# Subtest: A/V validation accepts correctly measured second-based audio duration
+ok 105 - A/V validation accepts correctly measured second-based audio duration
+  ---
+  duration_ms: 0.32401
+  type: 'test'
+  ...
+# Subtest: native mux lifecycle is finalization-safe and releases OPFS scratch output
+ok 106 - native mux lifecycle is finalization-safe and releases OPFS scratch output
+  ---
+  duration_ms: 0.601646
+  type: 'test'
+  ...
+# Subtest: FFmpeg progress callbacks are throttled in source to protect UI thread
+ok 107 - FFmpeg progress callbacks are throttled in source to protect UI thread
+  ---
+  duration_ms: 4.519127
+  type: 'test'
+  ...
+# Subtest: validated native MP4 output removes its OPFS scratch file
+ok 108 - validated native MP4 output removes its OPFS scratch file
+  ---
+  duration_ms: 1.654242
+  type: 'test'
+  ...
+# Subtest: successful exports remove resumable OPFS session artifacts immediately
+ok 109 - successful exports remove resumable OPFS session artifacts immediately
+  ---
+  duration_ms: 1.354464
+  type: 'test'
+  ...
+# Subtest: MP4 metadata validation removes both event listeners on any terminal outcome
+ok 110 - MP4 metadata validation removes both event listeners on any terminal outcome
+  ---
+  duration_ms: 0.993683
+  type: 'test'
+  ...
+# Subtest: v10 Android CI blocks APK on lint, tests, web E2E and runtime verification
+ok 111 - v10 Android CI blocks APK on lint, tests, web E2E and runtime verification
+  ---
+  duration_ms: 5.023275
+  type: 'test'
+  ...
+# Subtest: v10 long-session media probes stop callbacks after timeout and remove paired listeners
+ok 112 - v10 long-session media probes stop callbacks after timeout and remove paired listeners
+  ---
+  duration_ms: 4.526072
+  type: 'test'
+  ...
+# Subtest: v10 manual control exposes real multi-select batch stages
+ok 113 - v10 manual control exposes real multi-select batch stages
+  ---
+  duration_ms: 1.255404
+  type: 'test'
+  ...
+# Subtest: v10 project settings can be exported and imported
+ok 114 - v10 project settings can be exported and imported
+  ---
+  duration_ms: 0.204909
+  type: 'test'
+  ...
+# Subtest: v10 throttles interactive preview/preflight refreshes
+ok 115 - v10 throttles interactive preview/preflight refreshes
+  ---
+  duration_ms: 0.102876
+  type: 'test'
+  ...
+# Subtest: v10 includes mobile overflow and preview-height hardening
+ok 116 - v10 includes mobile overflow and preview-height hardening
+  ---
+  duration_ms: 0.24481
+  type: 'test'
+  ...
+# Subtest: v10 batch apply validates prerequisites before starting and select-all chooses ready stages only
+ok 117 - v10 batch apply validates prerequisites before starting and select-all chooses ready stages only
+  ---
+  duration_ms: 0.138994
+  type: 'test'
+  ...
+# Subtest: v10 project import resynchronizes model availability and output UI
+ok 118 - v10 project import resynchronizes model availability and output UI
+  ---
+  duration_ms: 0.09149
+  type: 'test'
+  ...
+# Subtest: v10 preview throttles large mobile canvases without affecting final render settings
+ok 119 - v10 preview throttles large mobile canvases without affecting final render settings
+  ---
+  duration_ms: 0.938618
+  type: 'test'
+  ...
+# Subtest: v10 interaction code debounces preview, preflight and prepared-state recalculation
+ok 120 - v10 interaction code debounces preview, preflight and prepared-state recalculation
+  ---
+  duration_ms: 5.191529
+  type: 'test'
+  ...
+# Subtest: v10 memory governor throttles progressively and recovers after pressure clears
+ok 121 - v10 memory governor throttles progressively and recovers after pressure clears
+  ---
+  duration_ms: 2.064009
+  type: 'test'
+  ...
+# Subtest: v10 performance manager propagates both throttle and recovery settings to tile engine
+ok 122 - v10 performance manager propagates both throttle and recovery settings to tile engine
+  ---
+  duration_ms: 1.013025
+  type: 'test'
+  ...
+# Subtest: v10 render uses offscreen full-resolution surface and throttled visible preview
+ok 123 - v10 render uses offscreen full-resolution surface and throttled visible preview
+  ---
+  duration_ms: 0.941094
+  type: 'test'
+  ...
+# Subtest: v10 render progress UI is throttled instead of updating every encoded frame
+ok 124 - v10 render progress UI is throttled instead of updating every encoded frame
+  ---
+  duration_ms: 0.19691
+  type: 'test'
+  ...
+# Subtest: v10 completed exports are not redundantly duplicated into frame cache
+ok 125 - v10 completed exports are not redundantly duplicated into frame cache
+  ---
+  duration_ms: 0.154195
+  type: 'test'
+  ...
+# Subtest: v10 checkpoint cadence scales by time instead of every few frames
+ok 126 - v10 checkpoint cadence scales by time instead of every few frames
+  ---
+  duration_ms: 0.367152
+  type: 'test'
+  ...
+# Subtest: v10 stage cache avoids per-hit IndexedDB writes and reconciles orphans
+ok 127 - v10 stage cache avoids per-hit IndexedDB writes and reconciles orphans
+  ---
+  duration_ms: 6.885319
+  type: 'test'
+  ...
+# Subtest: v10 reset invalidates stale async work and clears UI timers
+ok 128 - v10 reset invalidates stale async work and clears UI timers
+  ---
+  duration_ms: 1.047842
+  type: 'test'
+  ...
+# Subtest: v10 reset releases media handlers and reloads video elements
+ok 129 - v10 reset releases media handlers and reloads video elements
+  ---
+  duration_ms: 0.321458
+  type: 'test'
+  ...
+# Subtest: v10 resume truncates uncheckpointed tail before append
+ok 130 - v10 resume truncates uncheckpointed tail before append
+  ---
+  duration_ms: 0.875873
+  type: 'test'
+  ...
+# Subtest: v10 resumable search skips corrupt newest sessions
+ok 131 - v10 resumable search skips corrupt newest sessions
+  ---
+  duration_ms: 0.195431
+  type: 'test'
+  ...
+# Subtest: v10 source streaming releases reader lock on success and failure
+ok 132 - v10 source streaming releases reader lock on success and failure
+  ---
+  duration_ms: 0.107703
+  type: 'test'
+  ...
+# Subtest: v10 refuses duplicate active writer for same session
+ok 133 - v10 refuses duplicate active writer for same session
+  ---
+  duration_ms: 0.201493
+  type: 'test'
+  ...
+# Subtest: v10 quota failures are translated into actionable storage errors
+ok 134 - v10 quota failures are translated into actionable storage errors
+  ---
+  duration_ms: 0.196174
+  type: 'test'
+  ...
+# Subtest: v10 resume rejects non-active or malformed checkpoints
+ok 135 - v10 resume rejects non-active or malformed checkpoints
+  ---
+  duration_ms: 0.297376
+  type: 'test'
+  ...
+# Subtest: v10 source selection is race-safe and failed videos reset UI state
+ok 136 - v10 source selection is race-safe and failed videos reset UI state
+  ---
+  duration_ms: 5.83367
+  type: 'test'
+  ...
+# Subtest: v10 preview seeking is throttled instead of decoding on every touch event
+ok 137 - v10 preview seeking is throttled instead of decoding on every touch event
+  ---
+  duration_ms: 1.846489
+  type: 'test'
+  ...
+# Subtest: v10 thermal guard never resumes a user-paused render
+ok 138 - v10 thermal guard never resumes a user-paused render
+  ---
+  duration_ms: 4.740532
+  type: 'test'
+  ...
+# Subtest: v10 apply-stack preview has race protection and full media cleanup
+ok 139 - v10 apply-stack preview has race protection and full media cleanup
+  ---
+  duration_ms: 4.711111
+  type: 'test'
+  ...
+# Subtest: v10 pressure notifications are throttled to avoid toast storms
+ok 140 - v10 pressure notifications are throttled to avoid toast storms
+  ---
+  duration_ms: 1.272716
+  type: 'test'
+  ...
+# Subtest: elementary writer does not transact IndexedDB on every encoded frame
+ok 141 - elementary writer does not transact IndexedDB on every encoded frame
+  ---
+  duration_ms: 4.787114
+  type: 'test'
+  ...
+# Subtest: unknown frame-count render is still throttled
+ok 142 - unknown frame-count render is still throttled
+  ---
+  duration_ms: 2.106856
+  type: 'test'
+  ...
+# Subtest: v5.3 exposes numeric controls beside quality and color sliders
+ok 143 - v5.3 exposes numeric controls beside quality and color sliders
+  ---
+  duration_ms: 0.932779
+  type: 'test'
+  ...
+# Subtest: v5.3 blur has shutter angle, presets and blur-only MP4 render
+ok 144 - v5.3 blur has shutter angle, presets and blur-only MP4 render
+  ---
+  duration_ms: 0.227799
+  type: 'test'
+  ...
+# Subtest: v5.3 export presets are wired to real export controls
+ok 145 - v5.3 export presets are wired to real export controls
+  ---
+  duration_ms: 0.213525
+  type: 'test'
+  ...
+# Subtest: premium profile deck includes targeted enhancement profiles
+ok 146 - premium profile deck includes targeted enhancement profiles
+  ---
+  duration_ms: 1.242895
+  type: 'test'
+  ...
+# Subtest: quality lab is grouped into real processing categories
+ok 147 - quality lab is grouped into real processing categories
+  ---
+  duration_ms: 0.275312
+  type: 'test'
+  ...
+# Subtest: profiles can directly enable real AI switches
+ok 148 - profiles can directly enable real AI switches
+  ---
+  duration_ms: 0.881075
+  type: 'test'
+  ...
+# Subtest: v5.5 exposes a real on-device verification center
+ok 149 - v5.5 exposes a real on-device verification center
+  ---
+  duration_ms: 0.781746
+  type: 'test'
+  ...
+# Subtest: v5.5 device test covers real processing families
+ok 150 - v5.5 device test covers real processing families
+  ---
+  duration_ms: 0.455481
+  type: 'test'
+  ...
+# Subtest: Android build is pinned to Java 17 in source and GitHub Actions
+ok 151 - Android build is pinned to Java 17 in source and GitHub Actions
+  ---
+  duration_ms: 6.346336
+  type: 'test'
+  ...
+# Subtest: audio preservation and audio cleaning are independent real controls
+ok 152 - audio preservation and audio cleaning are independent real controls
+  ---
+  duration_ms: 4.065967
+  type: 'test'
+  ...
+# Subtest: every static byId reference exists in index or dynamic EngineLabs UI
+ok 153 - every static byId reference exists in index or dynamic EngineLabs UI
+  ---
+  duration_ms: 4.07591
+  type: 'test'
+  ...
+# Subtest: MotionFieldEngine recovers bounded global translation
+ok 154 - MotionFieldEngine recovers bounded global translation
+  ---
+  duration_ms: 8.370778
+  type: 'test'
+  ...
+# Subtest: DaVinci Color V3 selective controls change pixels
+ok 155 - DaVinci Color V3 selective controls change pixels
+  ---
+  duration_ms: 7.110474
+  type: 'test'
+  ...
+# Subtest: global motion estimator detects translated sample
+ok 156 - global motion estimator detects translated sample
+  ---
+  duration_ms: 1.028823
+  type: 'test'
+  ...
+# Subtest: RGB mixer changes channels with real matrix math
+ok 157 - RGB mixer changes channels with real matrix math
+  ---
+  duration_ms: 6.022379
+  type: 'test'
+  ...
+# Subtest: Quality V2 exposes micro texture and structure recovery as real effects
+ok 158 - Quality V2 exposes micro texture and structure recovery as real effects
+  ---
+  duration_ms: 0.369858
+  type: 'test'
+  ...
+# Subtest: NativeAiClient registers model and returns binary Float32 tensor
+ok 159 - NativeAiClient registers model and returns binary Float32 tensor
+  ---
+  duration_ms: 24.007027
+  type: 'test'
+  ...
+# Subtest: UpscaleEngine prefers native Android tile and falls back safely
+ok 160 - UpscaleEngine prefers native Android tile and falls back safely
+  ---
+  duration_ms: 0.753385
+  type: 'test'
+  ...
+# Subtest: Android native source exposes binary register/infer routes and shared runtime
+ok 161 - Android native source exposes binary register/infer routes and shared runtime
+  ---
+  duration_ms: 5.072142
+  type: 'test'
+  ...
+# Subtest: professional settings store persists and restores versioned payloads
+ok 162 - professional settings store persists and restores versioned payloads
+  ---
+  duration_ms: 4.865704
+  type: 'test'
+  ...
+# Subtest: v8 production UI exposes save/reset session controls
+ok 163 - v8 production UI exposes save/reset session controls
+  ---
+  duration_ms: 17.612781
+  type: 'test'
+  ...
+# Subtest: Android final has branded adaptive icon and release workflow
+ok 164 - Android final has branded adaptive icon and release workflow
+  ---
+  duration_ms: 2.634806
+  type: 'test'
+  ...
+# Subtest: v8.2 full automatic model suite includes every audited catalog model
+ok 165 - v8.2 full automatic model suite includes every audited catalog model
+  ---
+  duration_ms: 3.050146
+  type: 'test'
+  ...
+# Subtest: v8.2 Arabic help center is present with external tutorials
+ok 166 - v8.2 Arabic help center is present with external tutorials
+  ---
+  duration_ms: 0.991238
+  type: 'test'
+  ...
+# Subtest: v8.2 full models button requests all catalog models
+ok 167 - v8.2 full models button requests all catalog models
+  ---
+  duration_ms: 0.880525
+  type: 'test'
+  ...
+# Subtest: v8.3 Prism UI keeps four focused mobile workspaces
+ok 168 - v8.3 Prism UI keeps four focused mobile workspaces
+  ---
+  duration_ms: 5.702204
+  type: 'test'
+  ...
+# Subtest: v8.3 Arabic UI retains technical model names while translating controls
+ok 169 - v8.3 Arabic UI retains technical model names while translating controls
+  ---
+  duration_ms: 4.943127
+  type: 'test'
+  ...
+# Subtest: v8.4 blur complete exposes documented weighting families and mobile-safe fps cap
+ok 170 - v8.4 blur complete exposes documented weighting families and mobile-safe fps cap
+  ---
+  duration_ms: 1.362566
+  type: 'test'
+  ...
+# Subtest: v8.4 blur-only render is isolated from AI restore, temporal reconstruction and stabilization
+ok 171 - v8.4 blur-only render is isolated from AI restore, temporal reconstruction and stabilization
+  ---
+  duration_ms: 4.976166
+  type: 'test'
+  ...
+# Subtest: v8.4 blur workspace includes cfg compatibility and dedicated MP4 render controls
+ok 172 - v8.4 blur workspace includes cfg compatibility and dedicated MP4 render controls
+  ---
+  duration_ms: 2.048078
+  type: 'test'
+  ...
+# Subtest: v8.5 frame integrity accepts complete CFR sequence with zero missing frames
+ok 173 - v8.5 frame integrity accepts complete CFR sequence with zero missing frames
+  ---
+  duration_ms: 1.300912
+  type: 'test'
+  ...
+# Subtest: v8.5 frame integrity rejects a skipped output timestamp
+ok 174 - v8.5 frame integrity rejects a skipped output timestamp
+  ---
+  duration_ms: 0.448421
+  type: 'test'
+  ...
+# Subtest: v8.5 strict mode rejects non-monotonic decoded source order
+ok 175 - v8.5 strict mode rejects non-monotonic decoded source order
+  ---
+  duration_ms: 0.342007
+  type: 'test'
+  ...
+# Subtest: v8.5 frame integrity rejects encoder/output accounting mismatch before mux
+ok 176 - v8.5 frame integrity rejects encoder/output accounting mismatch before mux
+  ---
+  duration_ms: 5.59777
+  type: 'test'
+  ...
+# Subtest: v8.5 All Engine Boost includes Quality V2 and Face V2 stages
+ok 177 - v8.5 All Engine Boost includes Quality V2 and Face V2 stages
+  ---
+  duration_ms: 1.846528
+  type: 'test'
+  ...
+# Subtest: v8.6 native AI lazy model check avoids re-uploading cached face models
+ok 178 - v8.6 native AI lazy model check avoids re-uploading cached face models
+  ---
+  duration_ms: 23.112391
+  type: 'test'
+  ...
+# Subtest: v8.6 native inference sends fidelity and accepts exact face tensor output
+ok 179 - v8.6 native inference sends fidelity and accepts exact face tensor output
+  ---
+  duration_ms: 1.285976
+  type: 'test'
+  ...
+# Subtest: v8.6 native face and render-proof wiring are present in production paths
+ok 180 - v8.6 native face and render-proof wiring are present in production paths
+  ---
+  duration_ms: 6.312594
+  type: 'test'
+  ...
+# Subtest: 4K long-render governor chooses single-frame queues without changing requested output
+ok 181 - 4K long-render governor chooses single-frame queues without changing requested output
+  ---
+  duration_ms: 1.155952
+  type: 'test'
+  ...
+# Subtest: Denoise/Detail V3 stages resolve into real effects
+ok 182 - Denoise/Detail V3 stages resolve into real effects
+  ---
+  duration_ms: 2.639707
+  type: 'test'
+  ...
+# Subtest: Native RIFE path is wired end-to-end with Android fallback
+ok 183 - Native RIFE path is wired end-to-end with Android fallback
+  ---
+  duration_ms: 0.992868
+  type: 'test'
+  ...
+# Subtest: Compression Rescue V3 stages resolve into real effect settings
+ok 184 - Compression Rescue V3 stages resolve into real effect settings
+  ---
+  duration_ms: 1.047111
+  type: 'test'
+  ...
+# Subtest: Render resilience reduces queues but never requests frame dropping
+ok 185 - Render resilience reduces queues but never requests frame dropping
+  ---
+  duration_ms: 1.133431
+  type: 'test'
+  ...
+# Subtest: POCO F6 4K plan uses sustained mobile policy
+ok 186 - POCO F6 4K plan uses sustained mobile policy
+  ---
+  duration_ms: 0.307569
+  type: 'test'
+  ...
+# Subtest: render pipeline bounds encoder and disk-write backlog
+ok 187 - render pipeline bounds encoder and disk-write backlog
+  ---
+  duration_ms: 1.162249
+  type: 'test'
+  ...
+# Subtest: native MP4 failure falls back to durable elementary stream instead of losing render
+ok 188 - native MP4 failure falls back to durable elementary stream instead of losing render
+  ---
+  duration_ms: 0.265423
+  type: 'test'
+  ...
+# Subtest: long-render resources and terminal OPFS sessions are explicitly released
+ok 189 - long-render resources and terminal OPFS sessions are explicitly released
+  ---
+  duration_ms: 0.18761
+  type: 'test'
+  ...
+# Subtest: v9 final keeps model choice manual with no render-time substitution
+ok 190 - v9 final keeps model choice manual with no render-time substitution
+  ---
+  duration_ms: 1.873385
+  type: 'test'
+  ...
+# Subtest: v9 production EngineManager does not instantiate the legacy auto model selector
+ok 191 - v9 production EngineManager does not instantiate the legacy auto model selector
+  ---
+  duration_ms: 0.305458
+  type: 'test'
+  ...
+# Subtest: render resilience diagnostics reset cleanly between jobs
+ok 192 - render resilience diagnostics reset cleanly between jobs
+  ---
+  duration_ms: 1.570131
+  type: 'test'
+  ...
+# Subtest: automatic model provisioning stays idle once a source video is selected
+ok 193 - automatic model provisioning stays idle once a source video is selected
+  ---
+  duration_ms: 0.732929
+  type: 'test'
+  ...
+# Subtest: v9 final metadata is unified across web Android and GitHub artifacts
+ok 194 - v9 final metadata is unified across web Android and GitHub artifacts
+  ---
+  duration_ms: 0.941928
+  type: 'test'
+  ...
+# Subtest: Compact Pro exposes distinct specialist controls without merging blur/export
+ok 195 - Compact Pro exposes distinct specialist controls without merging blur/export
+  ---
+  duration_ms: 0.987204
+  type: 'test'
+  ...
+# Subtest: Compact groups map to real underlying stages
+ok 196 - Compact groups map to real underlying stages
+  ---
+  duration_ms: 0.184167
+  type: 'test'
+  ...
+# Subtest: Advanced controls are hidden by default only in enhance pane
+ok 197 - Advanced controls are hidden by default only in enhance pane
+  ---
+  duration_ms: 0.288033
+  type: 'test'
+  ...
+# Subtest: v9.2 supports independent multi-select processing cards
+ok 198 - v9.2 supports independent multi-select processing cards
+  ---
+  duration_ms: 0.818274
+  type: 'test'
+  ...
+# Subtest: v9.2 exposes simplified manual model roles
+ok 199 - v9.2 exposes simplified manual model roles
+  ---
+  duration_ms: 0.509285
+  type: 'test'
+  ...
+# Subtest: v9.2 keeps blur and export independent
+ok 200 - v9.2 keeps blur and export independent
+  ---
+  duration_ms: 0.147056
+  type: 'test'
+  ...
+# Subtest: v9.3 quick model download counters are present
+ok 201 - v9.3 quick model download counters are present
+  ---
+  duration_ms: 2.718281
+  type: 'test'
+  ...
+# Subtest: v9.4 exposes prepared render flow
+ok 202 - v9.4 exposes prepared render flow
+  ---
+  duration_ms: 0.908386
+  type: 'test'
+  ...
+# Subtest: v9.4 final render reuses matching prepared result
+ok 203 - v9.4 final render reuses matching prepared result
+  ---
+  duration_ms: 0.212493
+  type: 'test'
+  ...
+# Subtest: v9.4 model counter estimates remaining download time
+ok 204 - v9.4 model counter estimates remaining download time
+  ---
+  duration_ms: 0.123015
+  type: 'test'
+  ...
+# Subtest: v9.5 applies one heavy stage without re-running unrelated AI
+ok 205 - v9.5 applies one heavy stage without re-running unrelated AI
+  ---
+  duration_ms: 1.278569
+  type: 'test'
+  ...
+# Subtest: v9.5 explicit model passes stay manual and isolated
+ok 206 - v9.5 explicit model passes stay manual and isolated
+  ---
+  duration_ms: 0.428389
+  type: 'test'
+  ...
+# Subtest: v9.5+ final export avoids replaying baked heavy AI while preserving light controls
+ok 207 - v9.5+ final export avoids replaying baked heavy AI while preserving light controls
+  ---
+  duration_ms: 0.305087
+  type: 'test'
+  ...
+# Subtest: v9.5/v9.6 UI exposes heavy-stage apply plus stack undo
+ok 208 - v9.5/v9.6 UI exposes heavy-stage apply plus stack undo
+  ---
+  duration_ms: 1.973257
+  type: 'test'
+  ...
+# Subtest: v9.6 final export keeps light color/sharp but disables baked heavy stages
+ok 209 - v9.6 final export keeps light color/sharp but disables baked heavy stages
+  ---
+  duration_ms: 1.19839
+  type: 'test'
+  ...
+# Subtest: v9.6 UI exposes apply buttons only for heavy stages
+ok 210 - v9.6 UI exposes apply buttons only for heavy stages
+  ---
+  duration_ms: 5.042222
+  type: 'test'
+  ...
+# Subtest: v9.6.1 preserves final resolution/fps when those transforms were not baked
+ok 211 - v9.6.1 preserves final resolution/fps when those transforms were not baked
+  ---
+  duration_ms: 0.339886
+  type: 'test'
+  ...
+# Subtest: v9.6.1 source contains stale-stage guard and safe rewind
+ok 212 - v9.6.1 source contains stale-stage guard and safe rewind
+  ---
+  duration_ms: 1.976187
+  type: 'test'
+  ...
+# Subtest: v9.7 cache graph keys are deterministic and dependency-aware
+ok 213 - v9.7 cache graph keys are deterministic and dependency-aware
+  ---
+  duration_ms: 7.504942
+  type: 'test'
+  ...
+# Subtest: v9.7 thermal guard blocks severe and never changes quality
+ok 214 - v9.7 thermal guard blocks severe and never changes quality
+  ---
+  duration_ms: 0.295366
+  type: 'test'
+  ...
+# Subtest: v9.8 durable H264 resume reopens OPFS and seeds writer frame index
+ok 215 - v9.8 durable H264 resume reopens OPFS and seeds writer frame index
+  ---
+  duration_ms: 5.507838
+  type: 'test'
+  ...
+# Subtest: v9.8 stage cache has LRU budget and protects active apply masters
+ok 216 - v9.8 stage cache has LRU budget and protects active apply masters
+  ---
+  duration_ms: 3.113432
+  type: 'test'
+  ...
+# Subtest: v9.8 interrupted UI continues the render rather than only restoring settings
+ok 217 - v9.8 interrupted UI continues the render rather than only restoring settings
+  ---
+  duration_ms: 1.443268
+  type: 'test'
+  ...
+# Subtest: v9.8 automatic model installs require pinned SHA-256
+ok 218 - v9.8 automatic model installs require pinned SHA-256
+  ---
+  duration_ms: 1.624957
+  type: 'test'
+  ...
+1..218
+# tests 218
+# suites 0
+# pass 215
+# fail 3
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 8574.599098

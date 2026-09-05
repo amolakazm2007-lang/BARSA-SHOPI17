@@ -1,0 +1,1 @@
+-keepclassmembers class com.barsa.shopi.NativeBridge { @android.webkit.JavascriptInterface <methods>; }

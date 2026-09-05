@@ -1,0 +1,5 @@
+BARSA SHOPI v10 RC15.1 GITHUB LITE
+- Same application/source/Android/tests/workflows as FULL snapshot.
+- public/vendor intentionally omitted (~95 MB).
+- Run: npm ci && npm run prepare:runtime && npm run verify:runtime
+- GitHub Actions performs dependency install, tests, web build and Android build.

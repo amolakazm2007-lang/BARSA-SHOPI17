@@ -1,0 +1,7 @@
+node_modules/
+dist/
+public/vendor/
+*.log
+t720.webm
+tests/e2e-v3.png
+tests/e2e-v4*.png

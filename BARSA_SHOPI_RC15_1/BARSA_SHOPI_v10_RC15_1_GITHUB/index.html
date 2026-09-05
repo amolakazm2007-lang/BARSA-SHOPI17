@@ -1,0 +1,519 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#050a18">
+  <meta name="description" content="معالجة فيديو خاصة ومحلية بالكامل داخل المتصفح.">
+  <title>برسا شوبي · Barsa Shopi</title>
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" href="./icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="./src/styles.css">
+</head>
+<body>
+  <div class="ambient" aria-hidden="true"></div>
+  <header class="topbar">
+    <a class="brand" href="./" aria-label="برسا شوبي">
+      <span class="brand-mark" aria-hidden="true"><i></i></span>
+      <span><b>برسا شوبي</b><small>تحسين الفيديو بالذكاء الاصطناعي</small></span>
+    </a>
+    <div class="header-actions">
+      <span id="privacyBadge" class="status-pill">خاص 100%</span>
+      <button id="helpBtn" class="icon-button" type="button" aria-label="مركز الشروحات">؟</button><button id="doctorBtn" class="icon-button doctor-launch" type="button" aria-label="BARSA Doctor">✚</button><button id="capabilitiesBtn" class="icon-button" type="button" aria-label="تفاصيل الجهاز">•••</button>
+    </div>
+  </header>
+
+  <main class="workspace">
+    <section class="hero">
+      <div>
+        <p class="eyebrow">BARSA SHOPI · PRISM CORE</p>
+        <h1>حافظ على جودة فيديوك.<br><span>بأقصى قوة ممكنة.</span></h1>
+        <p class="lead">محرك تحسين فيديو محلي كامل: رفع دقة بالذكاء الاصطناعي، استعادة تفاصيل متعددة المراحل، RIFE، بلور زمني، ترميم وجوه، ألوان احترافية وتصدير MP4 — بدون رفع الفيديو إلى السحابة.</p><div class="prism-status"><span><i></i>ذكاء اصطناعي أصلي</span><span><i></i>معالجة زمنية</span><span><i></i>7 نماذج موثوقة</span><span><i></i>MP4 احترافي</span></div>
+      </div>
+      <div id="telemetry" class="telemetry" aria-label="قياسات الأداء">
+        <div><span>إطار/ث</span><b id="metricFps">0.0</b></div>
+        <div><span>المعالج الرسومي</span><b id="metricGpu">0 MB</b></div>
+        <div><span>الذاكرة</span><b id="metricRam">—</b></div>
+        <div><span>البلاطة</span><b id="metricTile">128</b></div>
+      </div>
+    </section>
+
+    <div id="restoreBanner" class="restore-banner" hidden>
+      <div><b>وجدنا جلسة توقفت سابقًا</b><span id="restoreDetails"></span></div>
+      <button id="restoreBtn" class="secondary-button" type="button">استعادة المصدر والإعدادات</button>
+      <button id="dismissRestoreBtn" class="text-button" type="button">تجاهل</button>
+    </div>
+
+    <section class="app-grid">
+      <div class="stage-panel">
+        <label id="dropzone" class="dropzone" for="videoInput">
+          <input id="videoInput" type="file" accept="video/mp4,video/webm,video/quicktime,video/*" hidden>
+          <span class="upload-icon">↥</span>
+          <strong>اختر فيديو وابدأ</strong>
+          <span>اضغط للاختيار · MP4 / WebM / MOV</span>
+          <small>معالجة خاصة 100% داخل جهازك</small>
+        </label>
+
+        <div id="previewShell" class="preview-shell" hidden>
+          <video id="sourceVideo" muted playsinline></video>
+          <canvas id="outputCanvas" aria-label="المعاينة الحية للفلاتر"></canvas>
+          <div class="compare-line" id="compareLine" aria-hidden="true"><span></span></div>
+          <span class="compare-label before">قبل</span><span class="compare-label after">بعد</span>
+          <div class="preview-overlay">
+            <div class="preview-meta"><span id="sourceInfo">—</span><span id="previewBackendBadge" class="live-badge">معاينة GPU</span></div>
+            <button id="changeVideoBtn" class="glass-button" type="button">تغيير</button>
+          </div>
+          <div class="preview-controls">
+            <button id="previewPlayBtn" class="preview-play" type="button" aria-label="تشغيل المعاينة">▶</button>
+            <span id="previewTime">00:00 / 00:00</span>
+            <input id="previewSeek" type="range" min="0" max="1000" value="0" aria-label="موضع الفيديو">
+            <button id="compareBtn" class="compare-button active" type="button">مقارنة قبل/بعد</button>
+          </div>
+        </div>
+
+        <div id="progressPanel" class="progress-panel" hidden>
+          <div class="progress-head">
+            <div><span id="progressStage">جارٍ التحضير</span><small id="progressDetail"></small></div>
+            <b id="progressPercent">0%</b>
+          </div>
+          <div class="progress-track"><span id="progressBar"></span></div>
+          <div class="render-stats">
+            <div><span>الوقت المتبقي</span><b id="etaValue">جارٍ القياس…</b></div>
+            <div><span>سرعة الرندر</span><b id="renderSpeed">—</b></div>
+            <div><span>الإطارات</span><b id="renderFrames">—</b></div>
+          </div>
+          <div class="job-actions">
+            <button id="pauseBtn" class="secondary-button" type="button">إيقاف مؤقت</button>
+            <button id="cancelBtn" class="danger-button" type="button">إلغاء</button>
+          </div>
+        </div>
+
+        <div id="resultPanel" class="result-panel" hidden>
+          <video id="resultVideo" controls playsinline></video>
+          <div class="result-summary">
+            <div><span>النتيجة</span><b id="resultInfo">—</b></div>
+            <a id="downloadBtn" class="primary-button" download>تنزيل الفيديو</a>
+            <button id="nativeSaveBtn" class="primary-button native-save-button" type="button" hidden>حفظ في المعرض</button>
+            <button id="renderProofBtn" class="secondary-button" type="button">تقرير سلامة الرندر</button>
+            <button id="newJobBtn" class="secondary-button" type="button">فيديو جديد</button>
+          </div>
+        </div>
+      </div>
+
+      <aside class="controls-panel" aria-label="إعدادات المعالجة">
+        <div class="panel-heading"><div><span>محرك BARSA الرئيسي</span><h2>استوديو التحسين الاحترافي</h2><small>تحكم يدوي كامل: كل مرحلة تزيدها أو تنقصها بنفسك، مع ترتيب أوضح وبدون قص أو خط زمني.</small></div><span id="backendBadge" class="backend-badge">فحص الجهاز…</span></div><div class="workflow-strip"><span class="active"><b>01</b> فيديو</span><span><b>02</b> تحسين</span><span><b>03</b> MP4</span></div>
+        <div class="pro-session-bar"><div><b>جلسة احترافية</b><small id="prefsStatus">الإعدادات تُحفظ تلقائياً على جهازك</small></div><div class="pro-session-actions"><button id="savePrefsBtn" type="button">حفظ الآن</button><button id="resetPrefsBtn" type="button">إعادة الضبط</button></div></div>
+
+        <nav id="masterTabs" class="master-tabs prism-tabs" aria-label="تقسيم الاستوديو">
+          <button class="active" type="button" data-master-target="studio" data-prism="source"><span class="tab-glyph">◈</span><b>الاستوديو</b><small>المصدر · المقاس · الجهاز</small></button>
+          <button type="button" data-master-target="enhance" data-prism="ai"><span class="tab-glyph">✦</span><b>التحسين</b><small>الجودة · الوجه · الألوان</small></button>
+          <button type="button" data-master-target="blur" data-prism="blur"><span class="tab-glyph">◌</span><b>البلور</b><small>بلور زمني · رندر خاص</small></button>
+          <button type="button" data-master-target="render" data-prism="export"><span class="tab-glyph">◇</span><b>التصدير</b><small>MP4 · H.264 · AAC</small></button>
+        </nav>
+
+        <section class="master-pane active" data-master-panel="studio">
+        <button id="autoFixBtn" class="auto-fix" type="button" disabled>
+          <span class="auto-fix-icon">✦</span><span><b>الإصلاح الذكي</b><small>تحليل الإضاءة والضوضاء والحدة تلقائياً</small></span><span>تحليل</span>
+        </button>
+        <div id="analysisCard" class="analysis-card" hidden>
+          <div><span>الإضاءة</span><b id="analysisExposure">—</b></div><div><span>الضوضاء</span><b id="analysisNoise">—</b></div><div><span>التفاصيل</span><b id="analysisDetail">—</b></div>
+          <p id="analysisSummary"></p>
+        </div>
+
+        <div class="ai-profile-head"><div><span>إعدادات BARSA الاحترافية</span><b>اختر نقطة بداية ثم عدّل كل شيء بيدك</b></div><small>الـ Profile لا يقفل أي قيمة؛ كل Stage وColor وAI يبقى قابل للزيادة والنقصان.</small></div>
+        <div class="preset-row premium-presets" role="group" aria-label="ملفات تحسين BARSA">
+          <button class="preset active" data-preset="natural-restore" type="button"><b>استعادة طبيعية</b><small>تنظيف طبيعي بدون مبالغة</small></button>
+          <button class="preset" data-preset="tiktok-rescue" type="button"><b>إنقاذ تيك توك</b><small>ضغط وسوشيال ميديا</small></button>
+          <button class="preset" data-preset="low-light" type="button"><b>إضاءة منخفضة</b><small>ضوضاء وظلال</small></button>
+          <button class="preset" data-preset="anime-clean" type="button"><b>تنظيف الأنمي</b><small>حواف نظيفة وألوان</small></button>
+          <button class="preset" data-preset="face-focus" type="button"><b>تركيز الوجه</b><small>ترميم الوجه والبشرة</small></button>
+          <button class="preset" data-preset="old-video" type="button"><b>فيديو قديم</b><small>إزالة التكتل والتدرج + ثبات</small></button>
+          <button class="preset" data-preset="gaming-60" type="button"><b>ألعاب 60</b><small>تفاصيل وحركة 60FPS</small></button>
+          <button class="preset" data-preset="clean-4k" type="button"><b>تنظيف 4K</b><small>4K نظيف ومتوازن</small></button>
+          <button class="preset" data-preset="maximum-detail" type="button"><b>أقصى تفاصيل</b><small>أقصى استعادة تفاصيل</small></button>
+          <button class="preset" data-preset="blur-pro" type="button"><b>بلور احترافي</b><small>بلور زمني مستقل</small></button>
+        </div>
+
+        <div class="form-grid">
+          <label>الدقة
+            <select id="resolution">
+              <option value="original">الأصلية</option>
+              <option value="720">720p</option>
+              <option value="1080" selected>1080p</option>
+              <option value="1440">1440p</option>
+              <option value="2160">4K</option>
+              <option value="custom">مقاس مخصص</option>
+            </select>
+          </label>
+          <label>نسبة الأبعاد
+            <select id="aspectRatio">
+              <option value="original" selected>نفس الفيديو</option>
+              <option value="16:9">16:9 · أفقي</option>
+              <option value="9:16">9:16 · عمودي</option>
+              <option value="1:1">1:1 · مربع</option>
+              <option value="4:5">4:5 · منشور</option>
+              <option value="3:4">3:4 · بورتريه</option>
+              <option value="4:3">4:3 · كلاسيكي</option>
+              <option value="21:9">21:9 · سينمائي</option>
+            </select>
+          </label>
+          <label>الإطارات
+            <select id="targetFps">
+              <option value="original" selected>الأصلية</option>
+              <option value="24">24 FPS</option>
+              <option value="30">30 FPS</option>
+              <option value="60">60 FPS</option>
+              <option value="120">120 FPS</option>
+            </select>
+          </label>
+          <label>الجودة
+            <select id="quality">
+              <option value="LOW">اقتصادية</option>
+              <option value="BALANCED" selected>متوازنة</option>
+              <option value="HIGH">عالية</option>
+              <option value="ULTRA">فائقة</option>
+            </select>
+          </label>
+          <label>الحاوية
+            <select id="outputFormat">
+              <option value="mp4" selected>MP4 · H.264 / AAC</option>
+            </select>
+          </label>
+          <label>ملاءمة الفيديو
+            <select id="fitMode">
+              <option value="contain" selected>كامل · بدون قص</option>
+              <option value="cover">ملء · قص مركزي</option>
+              <option value="stretch">تمديد للمقاس</option>
+            </select>
+          </label>
+          <label>وضع الجهاز
+            <select id="performanceMode">
+              <option value="auto" selected>تلقائي ذكي</option>
+              <option value="mobile">هاتف · حرارة أقل</option>
+              <option value="poco-f6">POCO F6 · توربو</option>
+              <option value="quality">أقصى جودة</option>
+            </select>
+          </label>
+        </div>
+        <div id="customSize" class="custom-size" hidden>
+          <label>العرض <input id="customWidth" type="number" min="2" max="8192" step="2" value="1080" inputmode="numeric"></label>
+          <span>×</span>
+          <label>الارتفاع <input id="customHeight" type="number" min="2" max="8192" step="2" value="1920" inputmode="numeric"></label>
+        </div>
+        <div class="format-readiness"><span>مسار الإخراج</span><b id="codecBadge">جارٍ فحص الترميز…</b><small id="codecDetail">سيتم اختيار أسرع مسار متوافق تلقائياً</small></div>
+        <div id="hardwareReadiness" class="hardware-readiness">
+          <span class="hardware-dot"></span>
+          <div><b id="hardwareProfile">فحص العتاد…</b><small id="hardwareDetail">WebGPU وترميز H.264</small></div>
+        </div>
+        </section>
+
+        <section class="master-pane" data-master-panel="enhance" hidden>
+        <div class="section-title"><span>قوة BARSA</span><button id="modelsBtn" class="text-button" type="button">النماذج</button></div>
+        <section class="compact-pro-shell" aria-label="واجهة BARSA المبسطة">
+          <div class="compact-pro-hero">
+            <div><span>COMPACT PRO</span><b>قوة كبيرة · واجهة بسيطة</b><small>كل زر يجمع فقط المحركات من نفس الاختصاص. التفاصيل المتقدمة تبقى موجودة عند الحاجة.</small></div>
+            <div class="compact-pro-badge">BARSA AI</div>
+          </div>
+          <div class="compact-pro-grid">
+            <article class="compact-power-card" data-compact-card="restore">
+              <div class="compact-card-head"><div class="compact-icon">✦</div><div><b>تنظيف الجودة</b><small>ضوضاء · ضغط · تكتل · تدرجات</small></div><label class="switch"><input id="cp-restore-on" type="checkbox" checked><span></span></label></div>
+              <label class="compact-strength"><span>القوة <output id="cp-restore-out">78%</output></span><input id="cp-restore-strength" type="range" min="0" max="100" value="78" step="1"></label>
+              <button class="compact-advanced" type="button" data-compact-advanced="quality">متقدم</button><button class="compact-apply" type="button" data-apply-stage="restore">تطبيق على الفيديو</button><small class="compact-apply-state" data-apply-state="restore">جاهز للتطبيق</small>
+            </article>
+            <article class="compact-power-card" data-compact-card="detail">
+              <div class="compact-card-head"><div class="compact-icon">◈</div><div><b>استعادة التفاصيل</b><small>تفاصيل دقيقة · نسيج · بنية · حواف</small></div><label class="switch"><input id="cp-detail-on" type="checkbox" checked><span></span></label></div>
+              <label class="compact-strength"><span>القوة <output id="cp-detail-out">82%</output></span><input id="cp-detail-strength" type="range" min="0" max="100" value="82" step="1"></label>
+              <button class="compact-advanced" type="button" data-compact-advanced="quality">متقدم</button><button class="compact-apply" type="button" data-apply-stage="detail">تطبيق على الفيديو</button><small class="compact-apply-state" data-apply-state="detail">جاهز للتطبيق</small>
+            </article>
+            <article class="compact-power-card" data-compact-card="sharp">
+              <div class="compact-card-head"><div class="compact-icon">◇</div><div><b>الحدة والوضوح</b><small>Sharpen · Clarity · Dehalo · Anti-ringing</small></div><label class="switch"><input id="cp-sharp-on" type="checkbox" checked><span></span></label></div>
+              <label class="compact-strength"><span>القوة <output id="cp-sharp-out">68%</output></span><input id="cp-sharp-strength" type="range" min="0" max="100" value="68" step="1"></label>
+              <button class="compact-advanced" type="button" data-compact-advanced="quality">متقدم</button><small class="compact-light-state">خفيف · يطبّق مباشرة بالرندر النهائي</small>
+            </article>
+            <article class="compact-power-card" data-compact-card="face">
+              <div class="compact-card-head"><div class="compact-icon">◎</div><div><b>الوجوه والبورتريه</b><small>كشف · ترميم · عين · شعر · حماية البشرة</small></div><label class="switch"><input id="cp-face-on" type="checkbox"><span></span></label></div>
+              <label class="compact-strength"><span>القوة <output id="cp-face-out">72%</output></span><input id="cp-face-strength" type="range" min="0" max="100" value="72" step="1"></label>
+              <button class="compact-advanced" type="button" data-compact-advanced="face">متقدم</button><button class="compact-apply" type="button" data-apply-stage="face">تطبيق على الفيديو</button><small class="compact-apply-state" data-apply-state="face">جاهز للتطبيق</small>
+            </article>
+            <article class="compact-power-card" data-compact-card="motion">
+              <div class="compact-card-head"><div class="compact-icon">≫</div><div><b>الحركة والنعومة</b><small>RIFE · Temporal · Anti-Flicker · Scene Guard</small></div><label class="switch"><input id="cp-motion-on" type="checkbox"><span></span></label></div>
+              <label class="compact-strength"><span>القوة <output id="cp-motion-out">65%</output></span><input id="cp-motion-strength" type="range" min="0" max="100" value="65" step="1"></label>
+              <button class="compact-advanced" type="button" data-compact-advanced="quality">متقدم</button><button class="compact-apply" type="button" data-apply-stage="motion">تطبيق على الفيديو</button><small class="compact-apply-state" data-apply-state="motion">جاهز للتطبيق</small>
+            </article>
+            <article class="compact-power-card" data-compact-card="stabilize">
+              <div class="compact-card-head"><div class="compact-icon">⌖</div><div><b>تثبيت الفيديو</b><small>تثبيت الاهتزاز فقط · بدون خلط مع الحركة</small></div><label class="switch"><input id="cp-stabilize-on" type="checkbox"><span></span></label></div>
+              <label class="compact-strength"><span>القوة <output id="cp-stabilize-out">55%</output></span><input id="cp-stabilize-strength" type="range" min="0" max="100" value="55" step="1"></label>
+              <button class="compact-advanced" type="button" data-compact-advanced="quality">متقدم</button><button class="compact-apply" type="button" data-apply-stage="stabilize">تطبيق على الفيديو</button><small class="compact-apply-state" data-apply-state="stabilize">جاهز للتطبيق</small>
+            </article>
+            <article class="compact-power-card compact-color-card" data-compact-card="color">
+              <div class="compact-card-head"><div class="compact-icon">◐</div><div><b>الألوان</b><small>لون · تباين · حيوية · إزالة ضباب</small></div><label class="switch"><input id="cp-color-on" type="checkbox" checked><span></span></label></div>
+              <label class="compact-strength"><span>القوة <output id="cp-color-out">62%</output></span><input id="cp-color-strength" type="range" min="0" max="100" value="62" step="1"></label>
+              <button class="compact-advanced" type="button" data-compact-advanced="color">متقدم</button><small class="compact-light-state">خفيف · يطبّق مباشرة بالرندر النهائي</small>
+            </article>
+          </div>
+          <section class="compact-stack-panel" aria-label="تسلسل المعالجة الفعال">
+            <div class="compact-stack-title"><span><b>المعالجة المفعّلة</b><small>تقدر تشغّل أكثر من اختصاص بنفس الوقت؛ كل اختصاص يبقى مستقل</small></span><strong id="compactActiveCount">0 مفعّل</strong></div>
+            <div id="compactActiveStack" class="compact-active-stack"></div>
+            <small>الترتيب الداخلي الآمن: تنظيف → تثبيت/معالجة زمنية → RIFE → ترميم الوجه → رفع الدقة → التفاصيل/الألوان → الترميز. فكرة الـStack مستوحاة من ترتيب المؤثرات في برامج الـCompositing، لكن بدون تعقيد Timeline.</small>
+          </section>
+
+          <section class="quick-models-panel" aria-label="النماذج السريعة">
+            <div class="quick-models-head"><span><b>النماذج الذكية</b><small>اختيار يدوي سريع + تنزيل وفحص تلقائي. BARSA لا يبدّل اختيارك أثناء الرندر.</small></span><button id="quickModelsPrepare" type="button">جهّز الكل</button></div>
+            <div class="quick-models-grid">
+              <label><span>رفع الدقة</span><select id="quickUpscaleModel"></select><button class="quick-apply" type="button" data-apply-stage="upscale">تطبيق الدقة</button><div class="quick-model-status"><small id="quickUpscaleModelState">يفحص…</small><b id="quickUpscaleModelProgress" class="model-progress-count" hidden>0%</b></div><div id="quickUpscaleModelBar" class="model-progress-bar" hidden><i></i></div></label>
+              <label><span>الحركة</span><select id="quickRifeModel"></select><button class="quick-apply" type="button" data-apply-stage="rife">تطبيق RIFE</button><div class="quick-model-status"><small id="quickRifeModelState">يفحص…</small><b id="quickRifeModelProgress" class="model-progress-count" hidden>0%</b></div><div id="quickRifeModelBar" class="model-progress-bar" hidden><i></i></div></label>
+              <label><span>الوجوه</span><select id="quickFaceModel"></select><button class="quick-apply" type="button" data-apply-stage="face">تطبيق الوجوه</button><div class="quick-model-status"><small id="quickFaceModelState">يفحص…</small><b id="quickFaceModelProgress" class="model-progress-count" hidden>0%</b></div><div id="quickFaceModelBar" class="model-progress-bar" hidden><i></i></div></label>
+            </div>
+            <div class="quick-models-actions"><button id="quickModelsManage" type="button">إدارة متقدمة</button><button id="quickModelsRepair" type="button">فحص / إصلاح</button></div>
+          </section>
+
+          <section id="applyStackCard" class="apply-stack-card" aria-label="مراحل التطبيق على الفيديو">
+            <div class="apply-stack-head"><span><b>تطبيق مباشر على الفيديو</b><small>كل مرحلة ثقيلة تنفّذ مرة واحدة وتصبح جزءاً من نسخة العمل. التصدير النهائي لا يعيدها.</small></span><strong id="applyStackCount">0 مرحلة</strong></div>
+            <div id="applyStackList" class="apply-stack-list"><span>بعدك ما طبقت أي مرحلة.</span></div>
+            <div class="batch-stage-panel" aria-label="تطبيق مراحل متعددة">
+              <div class="batch-stage-head"><span><b>اختيار متعدد</b><small>حدد أكثر من محرك ثقيل، ثم طبّق الكل بالتسلسل الآمن.</small></span><strong id="batchSelectedCount">0 محدد</strong></div>
+              <div class="batch-stage-grid">
+                <label><input type="checkbox" data-batch-stage="restore"> تنظيف</label>
+                <label><input type="checkbox" data-batch-stage="detail"> تفاصيل</label>
+                <label><input type="checkbox" data-batch-stage="face"> وجوه</label>
+                <label><input type="checkbox" data-batch-stage="upscale"> دقة</label>
+                <label><input type="checkbox" data-batch-stage="motion"> حركة</label>
+                <label><input type="checkbox" data-batch-stage="rife"> RIFE</label>
+                <label><input type="checkbox" data-batch-stage="stabilize"> تثبيت</label>
+                <label><input type="checkbox" data-batch-stage="blur"> Blur</label>
+              </div>
+              <div class="batch-stage-actions"><button id="selectAllBatchStagesBtn" type="button">تحديد الكل</button><button id="clearBatchStagesBtn" type="button">إلغاء التحديد</button><button id="applySelectedStagesBtn" type="button" disabled>تطبيق المحدد</button></div>
+              <small id="batchStageStatus">الترتيب: تنظيف ← تفاصيل ← وجوه ← دقة ← حركة/RIFE ← تثبيت ← Blur</small>
+            </div>
+            <div class="apply-stack-actions"><button id="undoApplyStageBtn" type="button" disabled>تراجع عن آخر تطبيق</button><button id="clearApplyStackBtn" type="button" disabled>الرجوع للأصل</button></div>
+            <div class="project-actions"><button id="exportProjectBtn" type="button">تصدير إعدادات المشروع</button><button id="importProjectBtn" type="button">استيراد إعدادات المشروع</button><input id="projectSettingsInput" type="file" accept="application/json,.json" hidden></div>
+            <small id="applyStackHint">التطبيق المسبق فقط للمحركات الثقيلة. الحدة والألوان تبقى خفيفة وتدخل بالرندر النهائي مباشرة.</small>
+          </section>
+
+          <button id="compactAdvancedToggle" class="compact-master-advanced" type="button">إظهار جميع الإعدادات المتقدمة</button>
+          <small class="compact-pro-note">البلور يبقى بخانة مستقلة ورندر مستقل. التصدير يبقى بخانة مستقلة حتى ما تختلط المعالجة بالإخراج.</small>
+        </section>
+        <div class="feature-list">
+          <div class="feature">
+            <div><b>رفع الدقة بالذكاء الاصطناعي</b><span>Real-ESRGAN عبر ONNX</span></div>
+            <div class="feature-action"><button class="model-button" data-import="upscale" type="button">استيراد ONNX</button><label class="switch"><input id="upscaleEnabled" type="checkbox"><span></span></label></div>
+          </div>
+          <div class="feature">
+            <div><b>زيادة الإطارات بالحركة الذكية</b><span>RIFE لحركة 60/120fps</span></div>
+            <div class="feature-action"><button class="model-button" data-import="rife" type="button">استيراد ONNX</button><label class="switch"><input id="rifeEnabled" type="checkbox"><span></span></label></div>
+          </div>
+          <div class="feature">
+            <div><b>حماية انتقالات المشاهد</b><span>يمنع دمج مشهدين مختلفين أثناء RIFE</span></div>
+            <label class="switch"><input id="protectSceneCuts" type="checkbox" checked><span></span></label>
+          </div>
+          <div class="feature">
+            <div><b>ترميم الوجوه</b><span>GFPGAN / CodeFormer</span></div>
+            <div class="feature-action"><button class="model-button" data-import="face" type="button">استيراد ONNX</button><label class="switch"><input id="faceEnabled" type="checkbox"><span></span></label></div>
+          </div>
+          <div class="feature">
+            <div><b>الاحتفاظ بالصوت</b><span>الاحتفاظ بمسار الصوت AAC داخل MP4 النهائي</span></div>
+            <label class="switch"><input id="audioEnabled" type="checkbox" checked><span></span></label>
+          </div>
+          <div class="feature">
+            <div><b>تنظيف الصوت</b><span>تقليل الضوضاء + فلاتر + موازنة مستوى الصوت</span></div>
+            <label class="switch"><input id="audioCleanEnabled" type="checkbox" checked><span></span></label>
+          </div>
+        </div>
+        <section class="ultra-ai-card">
+          <div class="section-title"><span>تقوية جميع المحركات</span><b>تقوية كل محركات التحسين</b></div>
+          <label class="lab-master"><span><b>تقوية شاملة لكل مراحل الجودة</b><small>يشغّل ويرفع مراحل Restore / Detail / Sharpness / Stability / Color دفعة واحدة. اختيار نماذج Upscale/RIFE/Face يبقى يدويًا بيدك.</small></span><span class="switch"><input id="allEngineBoostEnabled" type="checkbox" checked><span></span></span></label>
+          <label class="ultra-strength"><span>قوة المحرك الشاملة <output id="allEngineBoostStrengthOut">0.82</output></span><input id="allEngineBoostStrength" type="range" min="0" max="1" step="0.01" value="0.82"><input id="allEngineBoostStrengthNumber" type="number" min="0" max="1" step="0.01" value="0.82"></label>
+          <button id="applyAllEngineBoostBtn" class="primary-button" type="button">تطبيق القوة على كل المراحل</button>
+          <label class="lab-master"><span><b>المعالجة الزمنية المتقدمة</b><small>يقوي Temporal Denoise + Anti-Flicker + Detail Stability مع حماية المشاهد.</small></span><span class="switch"><input id="temporalMasterEnabled" type="checkbox" checked><span></span></span></label>
+          <label class="ultra-strength"><span>قوة المعالجة الزمنية المتقدمة <output id="temporalMasterStrengthOut">0.68</output></span><input id="temporalMasterStrength" type="range" min="0" max="1" step="0.01" value="0.68"><input id="temporalMasterStrengthNumber" type="number" min="0" max="1" step="0.01" value="0.68"></label>
+          <small id="allEngineBoostStatus" class="lab-status">اختيار النماذج يدوي. Auto-download يبقى شغال لتنزيل النماذج فقط.</small>
+        </section>
+        <input id="upscaleModelInput" type="file" accept=".onnx,application/octet-stream" hidden>
+        <input id="rifeModelInput" type="file" accept=".onnx,application/octet-stream" hidden>
+        <input id="faceModelInput" type="file" accept=".onnx,application/octet-stream" hidden>
+        <input id="faceDetectorModelInput" type="file" accept=".onnx,application/octet-stream" hidden>
+
+        <div class="manual-pro-note">
+          <b>تحكم يدوي كامل</b>
+          <small>كل مرحلة داخل هذا القسم يمكن تشغيلها أو إيقافها وتحديد قوتها يدويًا. افتح Blur من التبويب العلوي للحصول على رندر البلور الخاص.</small>
+        </div>
+        <div id="engineLabsMount" aria-label="Quality, Face, Blur and Color engine controls"></div>
+
+        <details class="advanced">
+          <summary>مرشحات إضافية / Legacy</summary>
+          <div class="sliders">
+            <label><span>الإضاءة <output id="brightnessOut">0.00</output></span><input id="brightness" type="range" min="-0.5" max="0.5" value="0" step="0.01"></label>
+            <label><span>التباين <output id="contrastOut">1.00</output></span><input id="contrast" type="range" min="0.5" max="1.8" value="1" step="0.01"></label>
+            <label><span>التشبع <output id="saturationOut">1.00</output></span><input id="saturation" type="range" min="0" max="2" value="1" step="0.01"></label>
+            <label><span>الحيوية <output id="vibranceOut">0.00</output></span><input id="vibrance" type="range" min="-1" max="1" value="0" step="0.01"></label>
+            <label><span>الحدة الذكية <output id="sharpenOut">0.35</output></span><input id="sharpen" type="range" min="0" max="2" value="0.35" step="0.01"></label>
+            <label><span>إظهار التفاصيل <output id="detailOut">0.15</output></span><input id="detail" type="range" min="0" max="2" value="0.15" step="0.01"></label>
+            <label><span>مرشح تمرير عالٍ <output id="highPassOut">0.00</output></span><input id="highPass" type="range" min="0" max="2" value="0" step="0.01"></label>
+            <label><span>إزالة الضوضاء <output id="denoiseOut">0.15</output></span><input id="denoise" type="range" min="0" max="1" value="0.15" step="0.01"></label>
+            <label><span>إزالة الضوضاء الزمنية <output id="temporalDenoiseOut">0.12</output></span><input id="temporalDenoise" type="range" min="0" max="1" value="0.12" step="0.01"></label>
+            <label><span>منع الوميض <output id="antiFlickerOut">0.10</output></span><input id="antiFlicker" type="range" min="0" max="1" value="0.10" step="0.01"></label>
+            <label><span>تنعيم البشرة الذكي <output id="portraitSmoothOut">0.12</output></span><input id="portraitSmooth" type="range" min="0" max="1" value="0.12" step="0.01"></label>
+            <label><span>حرارة اللون <output id="temperatureOut">0.00</output></span><input id="temperature" type="range" min="-1" max="1" value="0" step="0.01"></label>
+            <label><span>التعريض <output id="exposureOut">0.00</output></span><input id="exposure" type="range" min="-2" max="2" value="0" step="0.05"></label>
+            <label><span>الإضاءات العالية <output id="highlightsOut">0.00</output></span><input id="highlights" type="range" min="-1" max="1" value="0" step="0.01"></label>
+            <label><span>الظلال <output id="shadowsOut">0.00</output></span><input id="shadows" type="range" min="-1" max="1" value="0" step="0.01"></label>
+            <label><span>البياض <output id="whitesOut">0.00</output></span><input id="whites" type="range" min="-1" max="1" value="0" step="0.01"></label>
+            <label><span>السواد <output id="blacksOut">0.00</output></span><input id="blacks" type="range" min="-1" max="1" value="0" step="0.01"></label>
+            <label><span>إزالة الضباب <output id="dehazeOut">0.00</output></span><input id="dehaze" type="range" min="0" max="1" value="0" step="0.01"></label>
+            <label><span>تعتيم الحواف <output id="vignetteOut">0.00</output></span><input id="vignette" type="range" min="0" max="1" value="0" step="0.01"></label>
+            <label><span>حبيبات فيلم <output id="grainOut">0.00</output></span><input id="grain" type="range" min="0" max="1" value="0" step="0.01"></label>
+            <label><span>قوة ترميم الوجه AI <output id="faceStrengthOut">0.70</output></span><input id="faceStrength" type="range" min="0" max="1" value="0.7" step="0.01"></label>
+          </div>
+        </details>
+        </section>
+
+        <section class="master-pane blur-pane" data-master-panel="blur" hidden>
+          <div class="section-title"><span>استوديو البلور</span><b>رندر منفصل للبلور</b></div>
+          <div class="blur-focus-card">
+            <strong>هنا قسم البلور فقط</strong>
+            <small>من هذا التبويب راح ينفتح لك استوديو البلور مباشرة داخل محركات المعالجة تحت، ومعاه زر "رندر البلور فقط MP4" حتى تصدر البلور برندر خاص به بدون باقي المراحل.</small>
+            <ul>
+              <li>تحكم كامل بالـ قوة البلور</li>
+              <li>إطارات داخلية وخارجية</li>
+              <li>توليد الإطارات + إزالة التكرار</li>
+              <li>المُرمّز خاص للبلور</li>
+            </ul>
+          </div>
+          <div class="blur-inline-anchor">انزل قليلاً وستجد إعدادات البلور مفعلّة تلقائياً داخل قسم المحركات.</div>
+        </section>
+
+        <section class="master-pane" data-master-panel="render" hidden>
+        <section class="export-studio" aria-labelledby="exportStudioTitle">
+          <div class="section-title"><span>استوديو التصدير</span><b id="exportStudioTitle">تصدير MP4 احترافي</b></div>
+          <div class="export-hero"><div><strong>H.264 · AAC · Fast Start</strong><small>إخراج متوافق مع أندرويد، TikTok، Instagram والمعرض</small></div><span class="export-chip">MP4</span></div>
+          <div class="export-preset-row" aria-label="إعدادات تصدير سريعة">
+            <button type="button" data-export-preset="social">شبكات اجتماعية · جودة عالية</button>
+            <button type="button" data-export-preset="master">أقصى جودة</button>
+            <button type="button" data-export-preset="poco">POCO F6 · سريع</button>
+            <button type="button" data-export-preset="custom40">مخصص · 40 Mbps</button>
+          </div>
+          <div class="form-grid export-grid">
+            <label>معدل الفيديو
+              <select id="exportVideoMode">
+                <option value="auto" selected>تلقائي ذكي</option>
+                <option value="max">أقصى جودة</option>
+                <option value="custom">معدل بت مخصص</option>
+              </select>
+            </label>
+            <label>معدل البت Mbps
+              <input id="exportVideoBitrateMbps" type="number" min="1" max="240" step="1" value="24" inputmode="decimal" disabled>
+            </label>
+            <label>صوت AAC
+              <select id="exportAudioBitrateK">
+                <option value="128">128 kbps</option>
+                <option value="192" selected>192 kbps</option>
+                <option value="256">256 kbps</option>
+                <option value="320">320 kbps</option>
+              </select>
+            </label>
+            <label>المُرمّز
+              <select id="exportAcceleration">
+                <option value="auto" selected>تلقائي ذكي</option>
+                <option value="hardware">تفضيل العتاد</option>
+                <option value="software">تفضيل البرمجيات</option>
+              </select>
+            </label>
+          </div>
+          <div class="export-flags"><span>✓ yuv420p</span><span>✓ +faststart</span><span>✓ A/V Sync Guard</span><span>✓ MP4 Validation</span></div>
+        </section>
+
+        <div id="modelStatus" class="model-status" aria-live="polite"></div>
+        <section class="prepared-render-card" id="preparedRenderCard">
+          <div class="prepared-render-head"><span><b>تطبيق مسبق للتأثيرات</b><small>ينفّذ المعالجة الثقيلة مرة واحدة ويحفظ الناتج مؤقتاً. بعدها «الرندر النهائي» يستخدم الناتج الجاهز إذا لم تغيّر الإعدادات.</small></span><b id="preparedRenderBadge">غير مجهّز</b></div>
+          <div class="prepared-render-actions"><button id="prepareEffectsBtn" type="button" disabled>طبّق التأثيرات الآن</button><button id="clearPreparedBtn" type="button" hidden>مسح التجهيز</button></div>
+          <small id="preparedRenderState">اختر فيديو ثم جهّز النماذج والتأثيرات.</small>
+        </section>
+        <div class="estimate-card"><div><span>الوقت المقدر</span><b id="preflightEta">اختر فيديو للقياس</b></div><small id="preflightDetail">يتحدث تلقائياً حسب الجهاز والإعدادات</small><small id="preflightStorage">المساحة تُفحص قبل بدء الرندر</small></div>
+        <button id="startBtn" class="primary-button start-button" type="button" disabled>
+          <span>الرندر النهائي</span><small>إذا التجهيز مطابق: إخراج خفيف وسريع من الكاش الجاهز</small>
+        </button>
+        </section>
+      </aside>
+    </section>
+  </main>
+
+  <dialog id="helpDialog" class="help-dialog">
+    <div class="dialog-head"><div><span>أكاديمية BARSA</span><h2>مركز الشروحات</h2></div><button id="closeHelpBtn" class="icon-button" type="button">×</button></div>
+    <p class="help-intro">شرح عربي سريع لكل محرك، مع روابط فيديو خارجية للتعمق. الشروحات للتعلم فقط؛ المعالجة داخل BARSA تستخدم محركاته ونماذجه المحلية.</p>
+    <div class="help-grid">
+      <article><b>رفع الدقة · Real-ESRGAN</b><p>يرفع الدقة ويحاول استعادة الحواف والنسيج بدل التكبير العادي. استخدم Mobile SR للسرعة وReal-ESRGAN ×4 للجودة الأعلى.</p><a href="https://www.youtube.com/watch?v=zjzM_w4R7vA" target="_blank" rel="noopener">مشاهدة شرح Real-ESRGAN على YouTube ↗</a></article>
+      <article><b>RIFE · زيادة الإطارات</b><p>ينشئ إطارات وسيطة لتحسين الحركة و60/120FPS. كلما زاد المضاعف زاد الحمل؛ راقب النتيجة بصرياً.</p><a href="https://www.youtube.com/watch?v=LHunwnT2afc" target="_blank" rel="noopener">مشاهدة شرح RIFE على YouTube ↗</a></article>
+      <article><b>GFPGAN / CodeFormer · ترميم الوجوه</b><p>GFPGAN يميل لترميم قوي، وCodeFormer مناسب عندما تريد موازنة الهوية مع الاستعادة. YuNet يحدد منطقة الوجه أولاً.</p><a href="https://www.youtube.com/watch?v=b0EA7DzNBQ8" target="_blank" rel="noopener">مشاهدة شرح GFPGAN على YouTube ↗</a></article>
+      <article><b>استعادة التفاصيل والحدة</b><p>Detail Recovery يعيد البنية، Texture Recovery يعيد النسيج، وSmart Sharpen يحسن الحواف. Dehalo وAnti-Ringing يمنعان الهالات الناتجة عن الحدة الزائدة.</p></article>
+      <article><b>إزالة الضوضاء والضغط</b><p>Denoise ينظف الإطار، Temporal Denoise يستخدم عدة إطارات، Deblock يعالج مربعات الضغط، Deband يعالج تدرجات اللون المتكسرة، وArtifact Removal يقلل آثار الضغط.</p></article>
+      <article><b>استوديو البلور</b><p>البلور الحركي زمني حقيقي مع توزيع الأوزان وجاما وRIFE وإزالة التكرار. زر «رندر البلور فقط MP4» يتجاوز بقية مراحل التحسين ويصدر البلور مستقلاً.</p></article>
+      <article><b>الألوان الاحترافية</b><p>Exposure وLift/جاما/Gain وRGB Mixer والمنحنيات وLUT كلها معالجة بكسلات فعلية. ابدأ بتعديلات صغيرة ثم قارن قبل/بعد.</p><a href="https://www.youtube.com/watch?v=fjtlqLqVpFY" target="_blank" rel="noopener">مشاهدة شرح المنحنيات على YouTube ↗</a></article>
+      <article><b>التصدير MP4</b><p>H.264 + AAC + yuv420p + Fast Start لأعلى توافق. استخدم تلقائي ذكي عادة، وغيّر الـ bitrate يدوياً عندما تريد حجم أو جودة محددة.</p></article>
+    </div>
+  </dialog>
+
+  <dialog id="capabilitiesDialog">
+    <div class="dialog-head"><h2>قدرات الجهاز</h2><button id="closeCapabilitiesBtn" class="icon-button" type="button">×</button></div>
+    <pre id="capabilitiesText"></pre>
+    <div class="verification-center">
+      <div><span>مركز التحقق</span><b>اختبار فعلي لكل أداة على جهازك</b><small>يفحص الترميز، MP4، التخزين، الصوت، الجودة، الألوان، LUT، Blur، RIFE، Upscale، Face AI، YuNet، FFmpeg وCancel/Restart.</small></div>
+      <label class="verification-auto"><input id="hardwareTestAutoModels" type="checkbox" checked> نزّل النماذج الناقصة تلقائياً أثناء الاختبار</label>
+    </div>
+    <button id="hardwareTestBtn" class="secondary-button hardware-test" type="button">ابدأ الاختبار الفعلي الشامل</button>
+    <div id="hardwareTestResult" class="verification-results" aria-live="polite">جاهز للاختبار على الهاتف الحقيقي.</div>
+    <section class="doctor-panel">
+      <div class="doctor-head"><div><span>BARSA Doctor</span><b>طبيب التطبيق · تشخيص وإصلاح آمن</b><small>يفحص المحركات، النماذج، WebGPU، التخزين، Resume، الذاكرة والاختبارات الفعلية. الإصلاحات الآمنة فقط ولا تغيّر جودة الرندر.</small></div><strong id="doctorVerdict">لم يُفحص بعد</strong></div>
+      <div class="doctor-actions">
+        <button id="doctorQuickBtn" type="button">فحص سريع</button>
+        <button id="doctorFullBtn" type="button">تشخيص كامل</button>
+        <button id="doctorStressBtn" type="button">Stress Doctor</button>
+        <button id="doctorRepairBtn" type="button" disabled>إصلاح المشاكل الآمنة</button>
+      </div>
+      <div id="doctorSummary" class="doctor-summary">جاهز · لن يحذف نموذجاً موثوقاً ولن يغيّر إعدادات الجودة.</div>
+      <div id="doctorResult" class="verification-results doctor-results" aria-live="polite">—</div>
+    </section>
+    <p>ملاحظة: المتصفح لا يكشف استهلاك VRAM الحقيقي؛ الرقم المعروض هو الذاكرة التي خصصها التطبيق فقط.</p>
+  </dialog>
+
+  <dialog id="modelsDialog" class="models-dialog">
+    <div class="dialog-head"><div><span>مكتبة النماذج المحلية</span><h2>إدارة نماذج الذكاء الاصطناعي</h2></div><button id="closeModelsBtn" class="icon-button" type="button">×</button></div>
+    <p>تُحفظ النماذج داخل جهازك بعد فحص SHA والحجم وتشغيل استدلال فعلي، ولا تُرفع ملفات الفيديو إلى الإنترنت.</p><div class="ai-runtime-route"><span>مسار محركات AI</span><b id="aiRuntimeStatus">يفحص Native / WebGPU / WASM…</b></div><section class="auto-model-vault"><div><span>تنزيل وفحص النماذج تلقائياً</span><b>تجهيز الذكاء الاصطناعي تلقائياً</b><small id="autoModelStatus">يفحص النماذج الأساسية…</small></div><label class="auto-model-master"><span><b>التحميل التلقائي الكامل</b><small>ينزّل الحزمة الموثوقة كاملة بالتسلسل: Real-ESRGAN Turbo، Mobile SR، Real-ESRGAN ×4 Plus، RIFE 4.9 و4.7، YuNet 2026، GFPGAN وCodeFormer. لا يصبح أي نموذج جاهزاً قبل فحص البصمة وتشغيل inference فعلي.</small></span><span class="switch"><input id="autoFullModelsToggle" type="checkbox" checked><span></span></span></label><div class="auto-model-actions"><button id="autoModelsBtn" type="button">تجهيز النماذج الأساسية</button><button id="fullModelsBtn" type="button">تنزيل وفحص جميع النماذج</button></div><p>الحالة الخضراء تعني: الحجم صحيح + SHA-256 صحيح + ONNX يفتح + اختبار الاستدلال الفعلي نجح. التنزيل متسلسل حتى لا يضغط RAM على الهاتف.</p></section>
+    <section class="model-suite-status"><div class="section-title"><span>حالة الحزمة الكاملة</span><b id="modelSuiteSummary">0/9 شغال · 0 يحمل</b></div><div class="suite-grid">
+<span data-suite-model="realesr-general-x4v3-turbo"><span>Real-ESRGAN Turbo ×4<small>سريع للموبايل · ~4.87MB</small></span><b>0% · يفحص…</b><em class="suite-progress"><i></i></em></span>
+<span data-suite-model="onnx-model-zoo-sr-x3"><span>Mobile SR ×3<small>خفيف جداً · مرفق</small></span><b>0% · يفحص…</b><em class="suite-progress"><i></i></em></span>
+<span data-suite-model="real-esrgan-x4plus"><span>Real-ESRGAN ×4 Plus<small>جودة أعلى · ~67MB</small></span><b>0% · يفحص…</b><em class="suite-progress"><i></i></em></span>
+<span data-suite-model="rife-tensorstack"><span>RIFE 4.9<small>الحركة الافتراضية</small></span><b>0% · يفحص…</b><em class="suite-progress"><i></i></em></span>
+<span data-suite-model="rife47-emmajohnson311"><span>RIFE 4.7<small>بديل موثوق</small></span><b>0% · يفحص…</b><em class="suite-progress"><i></i></em></span>
+<span data-suite-model="yunet-2026may"><span>YuNet 2026<small>كشف وجوه ديناميكي · ~230KB</small></span><b>0% · 0KB/230KB · يفحص…</b><em class="suite-progress"><i></i></em></span>
+<span data-suite-model="yunet-2023mar"><span>YuNet 2023 fallback<small>بديل موثوق · ~233KB</small></span><b>0% · 0KB/233KB · يفحص…</b><em class="suite-progress"><i></i></em></span>
+<span data-suite-model="gfpgan-1.4"><span>GFPGAN 1.4<small>ترميم وجه · ~340MB</small></span><b>0% · يفحص…</b><em class="suite-progress"><i></i></em></span>
+<span data-suite-model="codeformer"><span>CodeFormer<small>ترميم وجه · ~337MB</small></span><b>0% · يفحص…</b><em class="suite-progress"><i></i></em></span>
+</div><small>«جاهز ✓» تعني أن النموذج اجتاز التحقق والتشغيل الفعلي على هذا الجهاز. النماذج اليدوية مثل Compatible ONNX أو Real-CUGAN لا تُعد جزءاً من الحزمة التلقائية إلا بعد استيراد ملفها وفحصه.</small></section>
+    <div class="model-grid">
+      <article><span>رفع الدقة بالذكاء الاصطناعي</span><b>Real-ESRGAN / Mobile SR</b><select id="upscaleModelProfile"><option value="realesr-general-x4v3-turbo">Real-ESRGAN Turbo ×4 · 4.87MB</option><option value="onnx-model-zoo-sr-x3">Mobile SR ×3 · مرفق</option><option value="real-esrgan-x4plus">Real-ESRGAN ×4 Plus · 67MB</option><option value="real-esrgan-compatible-x4">ONNX متوافق ×4</option><option value="real-esrgan-x8-facefusion">Real-ESRGAN ×8 FaceFusion · يدوي</option><option value="real-cugan-x2-fp16">Real-CUGAN ×2 · يدوي</option></select><small id="upscaleModelState">غير مثبت</small><div class="model-actions"><button data-install="upscale" type="button">تثبيت موثوق</button><button data-import="upscale" type="button">استيراد ONNX</button></div></article>
+      <article><span>الحركة والإطارات</span><b>RIFE · زيادة الإطارات</b><select id="rifeModelProfile"><option value="rife-tensorstack">RIFE 4.9 · تلقائي</option><option value="rife47-emmajohnson311">RIFE 4.7 · تلقائي</option><option value="rife-compatible">ONNX متوافق · يدوي</option></select><small id="rifeModelState">غير مثبت</small><div class="model-actions"><button data-install="rife" type="button">تثبيت تلقائي</button><button data-import="rife" type="button">استيراد ONNX</button></div></article>
+      <article><span>ترميم الوجوه والبورتريه</span><b>GFPGAN / CodeFormer</b><select id="faceModelProfile"><option value="gfpgan-1.4">GFPGAN 1.4 · تلقائي</option><option value="codeformer">CodeFormer · تلقائي</option></select><small id="faceModelState">غير مثبت</small><div class="model-actions"><button data-install="face" type="button">تثبيت تلقائي</button><button data-import="face" type="button">استيراد ONNX</button></div></article>
+      <article><span>اكتشاف الوجوه</span><b>OpenCV YuNet · ONNX</b><small id="faceDetectorModelState">كاشف اختياري أدق للوجوه الصغيرة والجانبية، ويعمل تلقائياً مع ترميم الوجه.</small><div class="model-actions"><button id="faceDetectorInstallBtn" type="button">تثبيت موثوق · 230KB</button><button id="faceDetectorImportBtn" type="button">استيراد ONNX</button></div></article>
+      <article class="nihui-card"><span>مكتبة NIHUI / NCNN</span><b>استيراد حزمة Nihui الأصلية</b><div class="nihui-row"><select id="nihuiRole"><option value="upscale">رفع الدقة</option><option value="rife">RIFE</option><option value="face">الوجه</option></select><button id="nihuiImportBtn" type="button">اختر .param + .bin</button></div><small id="nihuiModelState">تُحفظ وتُفحص محلياً. التشغيل داخل المتصفح يحتاج نسخة ONNX أو NCNN-WASM مخصصاً؛ Vulkan الأصلي لا يعمل داخل صفحة ويب.</small></article>
+    </div>
+    <section class="model-health-panel">
+      <div class="section-title"><span>فحص وإصلاح النماذج</span></div>
+      <div class="model-health-actions">
+        <select id="modelHealthRole"><option value="upscale">رفع الدقة</option><option value="rife">RIFE</option><option value="face">ترميم الوجوه</option></select>
+        <button id="modelAuditAllBtn" type="button">فحص كل المثبت</button>
+        <button id="modelRetestBtn" type="button">إعادة الاختبار</button>
+        <button id="modelRepairBtn" type="button">إصلاح تلقائي</button>
+        <button id="modelReplaceBtn" type="button">استبدال الملف</button>
+        <button id="modelDeleteBtn" class="danger-button" type="button">حذف</button>
+        <button id="modelSourceBtn" type="button">فتح المصدر</button>
+      </div>
+      <div class="model-url-row"><input id="modelURL" type="url" inputmode="url" placeholder="https://… رابط نموذج ONNX متوافق"><button id="modelURLBtn" type="button">استيراد الرابط</button></div>
+      <pre id="modelHealthDetails">اختر نموذجاً لعرض الإصدار والغرض والمصدر والبصمة والتوقيع ومحرك التنفيذ.</pre>
+    </section>
+    <input id="nihuiModelInput" type="file" accept=".param,.bin,application/octet-stream,text/plain" multiple hidden>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+  <script type="module" src="./src/main.js"></script>
+</body>
+</html>
