@@ -23,6 +23,9 @@ android {
         checkReleaseBuilds true
         disable 'SetJavaScriptEnabled'
         disable 'ObsoleteSdkInt'
+        // Deliberately pinned: androidx.core 1.19.0 requires API 37 / AGP 9.1,
+        // while this Android 16 build targets API 36 with AGP 8.9.1.
+        disable 'GradleDependency'
     }
 
     buildTypes {
