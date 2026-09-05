@@ -1,28 +1,30 @@
-name: BARSA SHOPI FINAL APK BUILD
+name: BARSA SHOPI v10.0.0 FINAL BUILD
 
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
+    branches: [ main ]
 
 permissions:
   contents: read
 
 concurrency:
-  group: barsa-shopi-final-${{ github.ref }}
+  group: barsa-shopi-v10-final-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build-apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 75
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Normalize final version metadata
+        run: node scripts/normalize-version-lock.mjs
+
+      - name: Setup Node 22
         uses: actions/setup-node@v4
         with:
           node-version: '22'
@@ -31,7 +33,7 @@ jobs:
       - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
-          distribution: 'temurin'
+          distribution: temurin
           java-version: '17'
 
       - name: Setup Android SDK
@@ -40,100 +42,102 @@ jobs:
       - name: Install Android SDK 36
         shell: bash
         run: |
+          set -euo pipefail
           yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager \
-            "platform-tools" \
-            "platforms;android-36" \
-            "build-tools;36.0.0"
+          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
 
       - name: Setup Gradle 8.11.1
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.11.1'
 
-      - name: Install npm dependencies
-        run: npm ci
+      - name: Install exact npm dependencies
+        run: npm ci --no-audit --no-fund
 
-      - name: Prepare BARSA runtime
-        run: npm run prepare:runtime
+      - name: Verify dependency installation
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f node_modules/mediabunny/package.json
+          node -e "import('mediabunny').then(()=>console.log('mediabunny import OK'))"
+
+      - name: Prepare and verify runtime
+        run: npm run prepare:runtime && npm run verify:runtime
 
       - name: Full JavaScript test suite
         run: npm test
 
-      - name: Quality and security gates
+      - name: Source packaging and security gates
         shell: bash
         run: |
+          set -euo pipefail
           mkdir -p reports
           npm run check
-          npm run verify:runtime
           npm run final:audit
           npm run check:packaging
           npm audit --omit=dev --audit-level=critical --json > reports/npm-audit.json
 
-      - name: Build web app
-        run: npm run build
-
-      - name: Sync Android
-        run: npm run android:sync
-
-      - name: Android lint - debug and release
+      - name: Browser mobile render verification
         shell: bash
         run: |
-          gradle -p android :app:lintDebug :app:lintRelease \
-            --stacktrace \
-            --no-daemon
+          set -euo pipefail
+          npx playwright install --with-deps chromium
+          npm run test:browser
+
+      - name: Build and sync web runtime
+        run: npm run build && node scripts/sync-android.mjs
+
+      - name: Android lint and unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle -p android :app:lintDebug :app:lintRelease :app:testDebugUnitTest --stacktrace --no-daemon
 
       - name: Build debug and release APKs
         shell: bash
         run: |
-          gradle -p android :app:assembleDebug :app:assembleRelease \
-            --stacktrace \
-            --no-daemon
+          set -euo pipefail
+          gradle -p android :app:assembleDebug :app:assembleRelease --stacktrace --no-daemon
 
       - name: Collect and verify APKs
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p release reports
-
+          mkdir -p final/reports
           DEBUG_APK="$(find android/app/build/outputs/apk/debug -name '*.apk' | head -n 1)"
           RELEASE_APK="$(find android/app/build/outputs/apk/release -name '*.apk' | head -n 1)"
+          test -s "$DEBUG_APK"
+          test -s "$RELEASE_APK"
+          cp "$DEBUG_APK" final/BARSA-SHOPI-v10.0.0-FINAL-installable.apk
+          cp "$RELEASE_APK" final/BARSA-SHOPI-v10.0.0-FINAL-release-unsigned.apk
+          BT="$ANDROID_HOME/build-tools/36.0.0"
+          "$BT/zipalign" -c -v 4 final/BARSA-SHOPI-v10.0.0-FINAL-installable.apk > final/reports/zipalign.txt
+          "$BT/apksigner" verify --verbose --print-certs final/BARSA-SHOPI-v10.0.0-FINAL-installable.apk > final/reports/apksigner.txt
+          "$BT/aapt" dump badging final/BARSA-SHOPI-v10.0.0-FINAL-installable.apk > final/reports/badging.txt
+          sha256sum final/*.apk > final/reports/SHA256SUMS.txt
+          cp reports/npm-audit.json final/reports/
+          cp android/app/build/reports/lint-results-debug.html final/reports/ 2>/dev/null || true
+          cp android/app/build/reports/lint-results-release.html final/reports/ 2>/dev/null || true
+          git archive --format=zip --output=final/BARSA-SHOPI-v10.0.0-FINAL-source.zip HEAD
+          zip -u final/BARSA-SHOPI-v10.0.0-FINAL-source.zip package-lock.json
+          printf 'BARSA SHOPI v10.0.0 FINAL\nInstallable APK: BARSA-SHOPI-v10.0.0-FINAL-installable.apk\nUnsigned release APK is included for production-key signing.\nSource and verification reports are included.\n' > final/README-FIRST.txt
 
-          test -n "$DEBUG_APK"
-          test -n "$RELEASE_APK"
+      - name: Build one downloadable final ZIP
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd final
+          zip -r ../BARSA-SHOPI-v10.0.0-FINAL.zip .
+          cd ..
+          test -s BARSA-SHOPI-v10.0.0-FINAL.zip
+          sha256sum BARSA-SHOPI-v10.0.0-FINAL.zip > BARSA-SHOPI-v10.0.0-FINAL.zip.sha256
 
-          cp "$DEBUG_APK" release/BARSA-SHOPI-v10-RC15.1-FINAL-installable.apk
-          cp "$RELEASE_APK" release/BARSA-SHOPI-v10-RC15.1-release-unsigned.apk
-
-          sha256sum release/BARSA-SHOPI-v10-RC15.1-FINAL-installable.apk \
-            > release/BARSA-SHOPI-v10-RC15.1-FINAL-installable.sha256
-          sha256sum release/BARSA-SHOPI-v10-RC15.1-release-unsigned.apk \
-            > release/BARSA-SHOPI-v10-RC15.1-release-unsigned.sha256
-
-          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -v 4 \
-            release/BARSA-SHOPI-v10-RC15.1-FINAL-installable.apk \
-            > release/BARSA-SHOPI-v10-RC15.1-FINAL-installable.zipalign.txt
-
-          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs \
-            release/BARSA-SHOPI-v10-RC15.1-FINAL-installable.apk \
-            > release/BARSA-SHOPI-v10-RC15.1-FINAL-installable.apksigner.txt
-
-          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging \
-            release/BARSA-SHOPI-v10-RC15.1-FINAL-installable.apk \
-            > release/BARSA-SHOPI-v10-RC15.1-FINAL-installable.badging.txt
-
-          cp android/app/build/reports/lint-results-debug.html reports/ 2>/dev/null || true
-          cp android/app/build/reports/lint-results-debug.xml reports/ 2>/dev/null || true
-          cp android/app/build/reports/lint-results-release.html reports/ 2>/dev/null || true
-          cp android/app/build/reports/lint-results-release.xml reports/ 2>/dev/null || true
-          ls -lh release/ reports/
-
-      - name: Upload final APK bundle and reports
+      - name: Upload complete final package
         uses: actions/upload-artifact@v4
         with:
-          name: BARSA-SHOPI-v10-RC15.1-FINAL
+          name: BARSA-SHOPI-v10.0.0-FINAL
           path: |
-            release/**
-            reports/**
+            BARSA-SHOPI-v10.0.0-FINAL.zip
+            BARSA-SHOPI-v10.0.0-FINAL.zip.sha256
           if-no-files-found: error
           retention-days: 90
