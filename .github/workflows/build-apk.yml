@@ -77,12 +77,12 @@ jobs:
           npm run check:packaging
           npm audit --omit=dev --audit-level=critical --json > reports/npm-audit.json
 
-      - name: Browser mobile render verification
+      - name: Deterministic mobile UI verification
         shell: bash
         run: |
           set -euo pipefail
           npx playwright install --with-deps chromium
-          npm run test:browser
+          node tests/e2e-mobile-smoke.mjs
 
       - name: Build and sync web runtime
         run: npm run build && node scripts/sync-android.mjs
