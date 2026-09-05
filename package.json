@@ -16,7 +16,8 @@
     "android:sync": "npm run build && node scripts/sync-android.mjs",
     "android:assemble": "npm run android:sync && cd android && gradle assembleDebug",
     "verify:runtime": "node scripts/verify-runtime-assets.mjs",
-    "check:packaging": "node scripts/check-packaging.mjs"
+    "check:packaging": "node scripts/check-packaging.mjs",
+    "check:release-invariants": "node scripts/check-release-invariants.mjs"
   },
   "dependencies": {
     "@ffmpeg/core": "0.12.10",
