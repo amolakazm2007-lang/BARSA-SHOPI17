@@ -17,7 +17,7 @@ try {
   const required = [
     '#startBtn', '#modelsBtn', '#applySelectedStagesBtn', '#upscaleEnabled',
     '#rifeEnabled', '[data-batch-stage="blur"]', '[data-batch-stage="restore"]',
-    '[data-master-target="render"]'
+    '[data-master-target="render"]', '[data-master-target="enhance"]'
   ];
   for (const selector of required) {
     if (await page.locator(selector).count() < 1) throw new Error(`Missing critical control: ${selector}`);
@@ -33,16 +33,24 @@ try {
   const overflow360 = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   if (overflow360 > 1) throw new Error(`360px mobile overflow: ${overflow360}px`);
 
+  // Render action must remain reachable on the compact mobile layout.
   await page.click('[data-master-target="render"]');
   await page.waitForTimeout(120);
   if (!(await page.locator('#startBtn').isVisible())) throw new Error('Render action is unreachable after opening Render at 360px');
 
+  // The models launcher belongs to the Enhance pane. Navigate there exactly as a
+  // phone user would instead of attempting to click the now-hidden control from
+  // the Render pane.
+  await page.click('[data-master-target="enhance"]');
+  await page.waitForTimeout(120);
+  if (!(await page.locator('#modelsBtn').isVisible())) throw new Error('Models launcher is unreachable after opening Enhance at 360px');
   await page.click('#modelsBtn');
+  await page.locator('#modelsDialog').waitFor({ state: 'visible' });
   if (!(await page.locator('[data-install="upscale"]').isVisible())) throw new Error('Manual upscale model catalog is not reachable');
   await page.click('#closeModelsBtn');
 
   if (errors.length) throw new Error(`Browser UI errors: ${errors.join(' | ')}`);
-  console.log(JSON.stringify({ mobileSmoke: true, multiCount, overflow390, overflow360, renderReachable: true }, null, 2));
+  console.log(JSON.stringify({ mobileSmoke: true, multiCount, overflow390, overflow360, renderReachable: true, modelsReachable: true }, null, 2));
 } finally {
   await browser?.close();
   server.kill('SIGTERM');
