@@ -32,6 +32,7 @@ import { MemoryGovernor } from './MemoryGovernor.js';
 import { StorageGovernor } from './StorageGovernor.js';
 import { RuntimeHealthGuard } from './RuntimeHealthGuard.js';
 import { BoundedAsyncQueue } from './BoundedAsyncQueue.js';
+import { ResourceScope } from './ResourceScope.js';
 
 const TERMINAL_STATES = new Set(['completed', 'failed', 'cancelled']);
 
@@ -213,12 +214,17 @@ export class EngineManager extends EventTarget {
     const workloadMB = estimateJobWorkloadMB(job.options);
     const heavyAi = hasHeavyAi(job.options);
     const runtimeDecision = this.runtimeGuard.evaluate({ capabilities: this.capabilities || {}, workloadMB, heavyAi });
+    const resourceScope = new ResourceScope(`job:${jobId}`);
+    let resourcesClosed = false;
     const context = {
       signal: job.controller.signal,
       engines: this.engines,
       capabilities: this.capabilities,
       runtimeGuard: this.runtimeGuard,
       runtimeDecision,
+      resources: resourceScope,
+      trackResource: (resource) => resourceScope.track(resource),
+      releaseResource: (resource) => resourceScope.release(resource),
       createBoundedQueue: (capacity = runtimeDecision.queueCap) => new BoundedAsyncQueue(Math.min(Math.max(1, capacity), runtimeDecision.queueCap)),
       update: (patch) => this.updateJob(jobId, patch),
       checkpoint: (patch) => this.checkpoint(jobId, patch),
@@ -241,6 +247,8 @@ export class EngineManager extends EventTarget {
       if (job.controller.signal.aborted) {
         throw job.controller.signal.reason || new DOMException('Processing cancelled by user', 'AbortError');
       }
+      await resourceScope.close();
+      resourcesClosed = true;
       job.result = null;
       job.state = 'completed';
       job.progress = 1;
@@ -253,6 +261,13 @@ export class EngineManager extends EventTarget {
       job.stage = job.state;
       throw error;
     } finally {
+      if (!resourcesClosed) {
+        try {
+          await resourceScope.close();
+        } catch (cleanupError) {
+          this._emit('warning', { code: 'RESOURCE_RELEASE_FAILED', jobId, error: serializeError(cleanupError) });
+        }
+      }
       job.updatedAt = Date.now();
       if (this.activeJobId === job.id) this.activeJobId = null;
       this._emitJob(job);
