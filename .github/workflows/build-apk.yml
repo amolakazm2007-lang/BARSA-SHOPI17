@@ -65,40 +65,51 @@ jobs:
         run: npm run prepare:runtime && npm run verify:runtime
 
       - name: Full JavaScript test suite
-        run: npm test
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p reports
+          npm test 2>&1 | tee reports/js-tests.log
 
       - name: Source packaging security and release invariant gates
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p reports
-          npm run check
-          npm run final:audit
-          npm run check:packaging
-          npm run check:release-invariants
-          npm audit --omit=dev --audit-level=moderate --json > reports/npm-audit.json
+          {
+            npm run check
+            npm run final:audit
+            npm run check:packaging
+            npm run check:release-invariants
+            npm audit --omit=dev --audit-level=moderate --json > reports/npm-audit.json
+          } 2>&1 | tee reports/release-gates.log
 
       - name: Deterministic mobile offline UI verification
         shell: bash
         run: |
           set -euo pipefail
-          npx playwright install --with-deps chromium
-          node tests/e2e-mobile-smoke.mjs
+          mkdir -p reports
+          npx playwright install --with-deps chromium 2>&1 | tee reports/playwright-install.log
+          node tests/e2e-mobile-smoke.mjs 2>&1 | tee reports/mobile-smoke.log
 
       - name: Build and sync web runtime
-        run: npm run build && node scripts/sync-android.mjs
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run build 2>&1 | tee reports/web-build.log
+          node scripts/sync-android.mjs 2>&1 | tee reports/android-sync.log
 
       - name: Android lint and unit tests
         shell: bash
         run: |
           set -euo pipefail
-          gradle -p android :app:lintDebug :app:lintRelease :app:testDebugUnitTest --stacktrace --no-daemon
+          gradle -p android :app:lintDebug :app:lintRelease :app:testDebugUnitTest --stacktrace --no-daemon 2>&1 | tee reports/android-lint-unit.log
 
       - name: Build debug and release APKs
         shell: bash
         run: |
           set -euo pipefail
-          gradle -p android :app:assembleDebug :app:assembleRelease --stacktrace --no-daemon
+          gradle -p android :app:assembleDebug :app:assembleRelease --stacktrace --no-daemon 2>&1 | tee reports/android-assemble.log
 
       - name: Collect sign and verify APKs
         shell: bash
@@ -145,7 +156,8 @@ jobs:
           grep -q "versionName='10.0.0'" final/reports/badging.txt
           sha256sum final/*.apk > final/reports/SHA256SUMS.txt
           printf '%s\n' "$SIGNING_MODE" > final/reports/signing-mode.txt
-          cp reports/npm-audit.json final/reports/
+          cp reports/*.log final/reports/ 2>/dev/null || true
+          cp reports/npm-audit.json final/reports/ 2>/dev/null || true
           cp android/app/build/reports/lint-results-debug.html final/reports/ 2>/dev/null || true
           cp android/app/build/reports/lint-results-release.html final/reports/ 2>/dev/null || true
           git archive --format=zip --output=final/BARSA-SHOPI-v10.0.0-FINAL-source.zip HEAD
@@ -173,3 +185,12 @@ jobs:
             BARSA-SHOPI-v10.0.0-FINAL.zip.sha256
           if-no-files-found: error
           retention-days: 90
+
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: BARSA-SHOPI-v10.0.0-DIAGNOSTICS-${{ github.run_number }}
+          path: reports/
+          if-no-files-found: warn
+          retention-days: 14
