@@ -1,4 +1,4 @@
-/* BARSA SHOPI v10 RC16 FINAL — Android full-screen fit + low-overdraw UI */
+/* BARSA SHOPI v10 FINAL — Android full-screen fit + low-overdraw UI */
 html,body{max-width:100%;min-height:100%;min-height:var(--barsa-vh,100dvh);overflow-x:hidden}
 .native-android{background:#050a18}
 .native-android body{width:100%;max-width:100%;min-height:var(--barsa-vh,100dvh);overflow-x:hidden;overscroll-behavior-y:none}
@@ -16,6 +16,9 @@ html,body{max-width:100%;min-height:100%;min-height:var(--barsa-vh,100dvh);overf
 .native-android .batch-stage-head b::after{content:' · MULTI';font-size:.68em;color:#8fffe2;margin-inline-start:6px}
 .native-android .batch-stage-grid label{min-width:0;overflow:hidden}
 .native-android #applySelectedStagesBtn:not(:disabled){box-shadow:0 0 0 1px rgba(110,255,221,.16) inset}
+html[data-low-ram="1"] .ambient,html[data-low-ram="1"] .glow,html[data-low-ram="1"] [class*="backdrop"]{display:none!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+html[data-low-ram="1"] *{box-shadow:none!important}
+html[data-ime-visible="1"] .app-shell,html[data-ime-visible="1"] .controls-pane{min-height:0!important}
 @media(max-width:900px){
  .native-android .workspace{padding-top:8px!important;padding-bottom:max(88px,calc(72px + env(safe-area-inset-bottom)))!important}
  .native-android .hero{margin-bottom:10px;padding:12px 10px}
