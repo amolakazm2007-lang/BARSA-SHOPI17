@@ -8,8 +8,8 @@ android {
         applicationId 'com.barsa.shopi'
         minSdk 29
         targetSdk 36
-        versionCode 1001501
-        versionName '10.0.0-rc15.1'
+        versionCode 1002000
+        versionName '10.0.0'
     }
 
     compileOptions {
