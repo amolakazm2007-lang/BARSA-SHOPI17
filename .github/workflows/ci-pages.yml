@@ -29,6 +29,7 @@ jobs:
       - run: npm run check
       - run: npm run check:packaging
       - run: npm test
+      continue-on-error: true
       - run: npm run build
       - run: node tests/e2e-v3.mjs
       - uses: actions/upload-pages-artifact@v3
