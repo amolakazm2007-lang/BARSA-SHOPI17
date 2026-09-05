@@ -2,9 +2,6 @@ import { evaluateExtendedModelDownload, connectionSnapshot } from './AutoModelPo
 export const AUTO_MODEL_PLAN = Object.freeze([
   { role: 'upscale', modelId: 'realesr-general-x4v3-turbo', priority: 'core', label: 'Real-ESRGAN Turbo ×4' },
   { role: 'upscale', modelId: 'onnx-model-zoo-sr-x3', priority: 'core', label: 'Mobile SR ×3' },
-  // The old TensorStack-first candidate can answer 401. Explicit core
-  // provisioning therefore starts with the independently mirrored 4.7 export.
-  // Users can still manually install any audited RIFE catalog entry.
   { role: 'rife', modelId: 'rife47-emmajohnson311', priority: 'core', label: 'RIFE 4.7 public mirror' },
   { role: 'faceDetector', modelId: 'yunet-2026may', priority: 'core', label: 'YuNet 2026 Face Detector' },
   { role: 'upscale', modelId: 'real-esrgan-x4plus', priority: 'extended', label: 'Real-ESRGAN ×4' },
@@ -13,19 +10,8 @@ export const AUTO_MODEL_PLAN = Object.freeze([
   { role: 'face', modelId: 'codeformer', priority: 'extended', label: 'CodeFormer' },
 ]);
 
-/**
- * Sequential model provisioning for mobile devices.
- * Large sessions are never loaded together; every model must pass the engine's
- * real runtime self-test before this vault reports it as ready.
- *
- * SECURITY/STABILITY INVARIANT:
- * In an interactive browser/WebView, network provisioning is allowed only while
- * handling a real user activation. This is deliberately enforced here, at the
- * model-vault boundary, rather than only in UI code. It prevents boot, idle,
- * visibility, connectivity, or retry hooks from ever starting hidden multi-MB
- * model downloads. Node/non-DOM callers remain available for deterministic unit
- * tests and tooling. Manual local model import does not pass through this vault.
- */
+const EXPLICIT_MODEL_ACTION_IDS = new Set(['autoModelsBtn', 'fullModelsBtn']);
+
 export class AutoModelVault {
   constructor({ manager, provisioner, registries, onProgress = null } = {}) {
     this.manager = manager;
@@ -36,12 +22,14 @@ export class AutoModelVault {
   }
 
   _interactiveProvisioningAllowed() {
-    // No DOM means unit-test/tooling context, not a user-facing runtime.
     if (typeof globalThis.document === 'undefined') return true;
     const activation = globalThis.navigator?.userActivation;
-    // Fail closed in browsers that expose no activation state: model downloads
-    // remain available through the explicit per-model install/import controls.
-    return activation?.isActive === true;
+    const focusedId = globalThis.document?.activeElement?.id || '';
+    // Transient user activation alone is not sufficient: a background idle
+    // callback may run while the activation from an unrelated click is still
+    // alive. Requiring one of the dedicated model buttons makes provisioning
+    // fail closed for startup, visibility, connectivity and catalog-open paths.
+    return activation?.isActive === true && EXPLICIT_MODEL_ACTION_IDS.has(focusedId);
   }
 
   async ensureCore({ includeFace = false, includeAllCatalog = false, forceExtended = false } = {}) {
@@ -141,12 +129,6 @@ export class AutoModelVault {
   }
 }
 
-/**
- * Give input, layout and paint a chance to run between heavyweight model jobs.
- * scheduler.yield() is used when available; all Android WebView/Chromium builds
- * retain a zero-delay fallback. `paint` additionally waits for one frame in a
- * visible document. This only changes scheduling, never model/output quality.
- */
 export async function cooperativeUiYield({ paint = false } = {}) {
   if (globalThis.scheduler?.yield) {
     await globalThis.scheduler.yield();
