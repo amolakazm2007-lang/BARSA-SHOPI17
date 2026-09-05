@@ -30,6 +30,8 @@ import { BarsaDoctor } from './BarsaDoctor.js';
 import { DevicePerformancePassport } from './DevicePerformancePassport.js';
 import { MemoryGovernor } from './MemoryGovernor.js';
 import { StorageGovernor } from './StorageGovernor.js';
+import { RuntimeHealthGuard } from './RuntimeHealthGuard.js';
+import { BoundedAsyncQueue } from './BoundedAsyncQueue.js';
 
 const TERMINAL_STATES = new Set(['completed', 'failed', 'cancelled']);
 
@@ -71,6 +73,11 @@ export class EngineManager extends EventTarget {
     this.performancePassport = new DevicePerformancePassport();
     this.memoryGovernor = new MemoryGovernor();
     this.storageGovernor = new StorageGovernor({ passport: this.performancePassport });
+    this.runtimeGuard = new RuntimeHealthGuard({
+      memoryGovernor: this.memoryGovernor,
+      performance: this.engines.performance,
+      storageGovernor: this.storageGovernor,
+    });
     this.jobs = new Map();
     this.activeJobId = null;
     this.deviceTest = new FullDeviceTestEngine(this);
@@ -93,11 +100,9 @@ export class EngineManager extends EventTarget {
       this.engines.tiles.configure(event.detail.settings);
       this._emit('warning', { code: 'MEMORY_PRESSURE', ...event.detail });
     });
-    // Completed/aborted jobs are not resumable and otherwise accumulate full
-    // source + elementary + MP4 copies in OPFS across app launches.
-    await this.engines.storage.pruneTerminalSessions({ keepCompleted: 0 }).catch(() => {});
-    await this.engines.storage.enforceStageCacheBudget().catch(() => {});
-    const resumable = await this.engines.storage.findResumableSession().catch(() => null);
+    await this._bestEffort('prune-terminal-sessions', () => this.engines.storage.pruneTerminalSessions({ keepCompleted: 0 }));
+    await this._bestEffort('enforce-stage-cache-budget', () => this.engines.storage.enforceStageCacheBudget());
+    const resumable = await this._bestEffort('find-resumable-session', () => this.engines.storage.findResumableSession(), null);
     this._emit('ready', { capabilities: this.capabilities, resumable });
     return { capabilities: this.capabilities, resumable };
   }
@@ -124,16 +129,17 @@ export class EngineManager extends EventTarget {
       nativeAAC: false,
     };
     const [deviceProfile, codecs, h264Matrix, nativeAAC] = await Promise.all([
-      this.engines.hardware.detectProfile().catch(() => null),
-      capabilities.webCodecs ? getSupportedCodecs().catch(() => []) : [],
-      capabilities.webCodecs ? this.engines.hardware.probeH264().catch(() => []) : [],
-      capabilities.audioCodecs ? supportsNativeAAC().catch(() => false) : false,
+      this.engines.hardware.detectProfile().catch((error) => { this._emit('warning', { code: 'HARDWARE_PROFILE_PROBE_FAILED', error: serializeError(error) }); return null; }),
+      capabilities.webCodecs ? getSupportedCodecs().catch((error) => { this._emit('warning', { code: 'CODEC_PROBE_FAILED', error: serializeError(error) }); return []; }) : [],
+      capabilities.webCodecs ? this.engines.hardware.probeH264().catch((error) => { this._emit('warning', { code: 'H264_PROBE_FAILED', error: serializeError(error) }); return []; }) : [],
+      capabilities.audioCodecs ? supportsNativeAAC().catch((error) => { this._emit('warning', { code: 'AAC_PROBE_FAILED', error: serializeError(error) }); return false; }) : false,
     ]);
     capabilities.deviceProfile = deviceProfile;
     capabilities.webCodecsCodecs = codecs;
     capabilities.h264Matrix = h264Matrix;
     capabilities.nativeAAC = nativeAAC;
-    try { capabilities.webGL2 = Boolean(document.createElement('canvas').getContext('webgl2')); } catch {}
+    try { capabilities.webGL2 = Boolean(document.createElement('canvas').getContext('webgl2')); }
+    catch (error) { this._emit('warning', { code: 'WEBGL2_PROBE_FAILED', error: serializeError(error) }); }
     if (navigator.gpu) {
       try {
         const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
@@ -147,7 +153,9 @@ export class EngineManager extends EventTarget {
             maxBufferSize: Number(adapter.limits.maxBufferSize),
           };
         }
-      } catch {}
+      } catch (error) {
+        this._emit('warning', { code: 'WEBGPU_ADAPTER_FAILED', error: serializeError(error) });
+      }
     }
     return capabilities;
   }
@@ -201,21 +209,38 @@ export class EngineManager extends EventTarget {
     job.state = 'running';
     job.startedAt = Date.now();
     this._emitJob(job);
+
+    const workloadMB = estimateJobWorkloadMB(job.options);
+    const heavyAi = hasHeavyAi(job.options);
+    const runtimeDecision = this.runtimeGuard.evaluate({ capabilities: this.capabilities || {}, workloadMB, heavyAi });
     const context = {
       signal: job.controller.signal,
       engines: this.engines,
       capabilities: this.capabilities,
+      runtimeGuard: this.runtimeGuard,
+      runtimeDecision,
+      createBoundedQueue: (capacity = runtimeDecision.queueCap) => new BoundedAsyncQueue(Math.min(Math.max(1, capacity), runtimeDecision.queueCap)),
       update: (patch) => this.updateJob(jobId, patch),
       checkpoint: (patch) => this.checkpoint(jobId, patch),
       waitIfPaused: () => this.waitIfPaused(jobId),
     };
     try {
+      if (!runtimeDecision.allowNewHeavyAiWork) {
+        this.updateJob(jobId, { stage: 'resource-guard' });
+        const error = new Error('Heavy AI work is temporarily blocked by BARSA runtime protection');
+        error.name = 'RecoverableResourcePressureError';
+        error.code = 'MEMORY_PRESSURE';
+        error.recoverable = true;
+        error.decision = runtimeDecision;
+        throw error;
+      }
+      if (runtimeDecision.state !== 'normal') {
+        this._emit('warning', { code: 'RUNTIME_RESOURCE_GUARD', decision: runtimeDecision, jobId });
+      }
       const result = await processor(context);
       if (job.controller.signal.aborted) {
         throw job.controller.signal.reason || new DOMException('Processing cancelled by user', 'AbortError');
       }
-      // Do not retain potentially multi-GB Blob/video results in job history.
-      // Callers receive the result directly; the manager only keeps lightweight status.
       job.result = null;
       job.state = 'completed';
       job.progress = 1;
@@ -299,7 +324,6 @@ export class EngineManager extends EventTarget {
     return true;
   }
 
-  /** Verifies cancel cleanup and that a fresh job can start without reloading. */
   async runCancelRestartSelfTest() {
     if (this.activeJobId) throw new Error('Cannot run cancel/restart self-test while another job is active');
     const first = this.createJob('self-test-cancel', {});
@@ -385,6 +409,15 @@ export class EngineManager extends EventTarget {
     await this.engines.storage.close();
   }
 
+  async _bestEffort(label, operation, fallback = null) {
+    try {
+      return await operation();
+    } catch (error) {
+      this._emit('warning', { code: 'BEST_EFFORT_OPERATION_FAILED', label, error: serializeError(error) });
+      return fallback;
+    }
+  }
+
   _pruneJobHistory(maxTerminalJobs = 24) {
     const terminal = [...this.jobs.values()]
       .filter((job) => TERMINAL_STATES.has(job.state) && job.id !== this.activeJobId)
@@ -407,6 +440,21 @@ export class EngineManager extends EventTarget {
   }
 }
 
+function estimateJobWorkloadMB(options = {}) {
+  const width = Math.max(1, Number(options.width || options.outputWidth || options.targetWidth || options.resolution?.width || 1920));
+  const height = Math.max(1, Number(options.height || options.outputHeight || options.targetHeight || options.resolution?.height || 1080));
+  const pixels = width * height;
+  const frameMB = pixels * 4 / 1024 / 1024;
+  const ai = hasHeavyAi(options) ? 3.5 : 1.5;
+  const queue = Math.max(1, Number(options.queueDepth || options.codecQueue || 2));
+  return Math.max(16, Math.round(frameMB * ai * queue));
+}
+
+function hasHeavyAi(options = {}) {
+  const text = JSON.stringify(options || {}).toLowerCase();
+  return /"(upscale|rife|face|aienabled|upscaleenabled|rifeenabled|faceenabled)"\s*:\s*(true|"on"|1)/.test(text);
+}
+
 function omit(object, keys) {
   const blocked = new Set(keys);
   return Object.fromEntries(Object.entries(object).filter(([key]) => !blocked.has(key)));
@@ -421,5 +469,5 @@ function structuredCloneSafe(value) {
 }
 
 function serializeError(error) {
-  return { name: error?.name || 'Error', message: error?.message || String(error), stack: error?.stack || null };
+  return { name: error?.name || 'Error', message: error?.message || String(error), stack: error?.stack || null, code: error?.code || null, recoverable: error?.recoverable === true };
 }
