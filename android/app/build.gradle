@@ -21,11 +21,7 @@ android {
         abortOnError true
         warningsAsErrors true
         checkReleaseBuilds true
-        // Intentional: BARSA SHOPI is a local WebView application whose JavaScript
-        // bridge is restricted to the app's loopback origin and uses a per-session token.
         disable 'SetJavaScriptEnabled'
-        // Intentional compatibility guards are kept around newer platform APIs even
-        // though the current minSdk is 29, so future minSdk changes remain low-risk.
         disable 'ObsoleteSdkInt'
     }
 
@@ -37,8 +33,7 @@ android {
     }
 }
 
-
 dependencies {
-    implementation 'androidx.core:core:1.19.0'
+    implementation 'androidx.core:core:1.17.0'
     implementation 'com.microsoft.onnxruntime:onnxruntime-android:1.22.0'
 }
