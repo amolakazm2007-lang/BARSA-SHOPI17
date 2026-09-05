@@ -2,10 +2,13 @@ import { evaluateExtendedModelDownload, connectionSnapshot } from './AutoModelPo
 export const AUTO_MODEL_PLAN = Object.freeze([
   { role: 'upscale', modelId: 'realesr-general-x4v3-turbo', priority: 'core', label: 'Real-ESRGAN Turbo ×4' },
   { role: 'upscale', modelId: 'onnx-model-zoo-sr-x3', priority: 'core', label: 'Mobile SR ×3' },
-  { role: 'rife', modelId: 'rife-tensorstack', priority: 'core', label: 'RIFE 4.9' },
+  // The old TensorStack-first candidate can answer 401. Explicit core
+  // provisioning therefore starts with the independently mirrored 4.7 export.
+  // Users can still manually install any audited RIFE catalog entry.
+  { role: 'rife', modelId: 'rife47-emmajohnson311', priority: 'core', label: 'RIFE 4.7 public mirror' },
   { role: 'faceDetector', modelId: 'yunet-2026may', priority: 'core', label: 'YuNet 2026 Face Detector' },
   { role: 'upscale', modelId: 'real-esrgan-x4plus', priority: 'extended', label: 'Real-ESRGAN ×4' },
-  { role: 'rife', modelId: 'rife47-emmajohnson311', priority: 'extended', label: 'RIFE 4.7' },
+  { role: 'rife', modelId: 'rife-tensorstack', priority: 'extended', label: 'RIFE 4.9' },
   { role: 'face', modelId: 'gfpgan-1.4', priority: 'extended', label: 'GFPGAN 1.4' },
   { role: 'face', modelId: 'codeformer', priority: 'extended', label: 'CodeFormer' },
 ]);
@@ -86,9 +89,6 @@ export class AutoModelVault {
         results.push({ ...item, ok: false, error: error?.message || String(error) });
         this.onProgress?.({ stage: 'model-error', index, total: plan.length, error, ...item });
       }
-      // Release transient inference sessions between large model validations.
-      // Yield twice: once after destruction so GC/driver cleanup can progress,
-      // then once at a paint boundary so model provisioning never monopolizes UI.
       await this._releaseTransient(item.role);
       await cooperativeUiYield({ paint: true });
     }
