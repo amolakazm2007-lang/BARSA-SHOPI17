@@ -5,6 +5,7 @@
     <item name="android:statusBarColor">#02040B</item>
     <item name="android:navigationBarColor">#02040B</item>
     <item name="android:windowActionModeOverlay">true</item>
+    <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
     <item name="android:windowLightNavigationBar">false</item>
     <item name="android:enforceNavigationBarContrast">false</item>
     <item name="android:enforceStatusBarContrast">false</item>
