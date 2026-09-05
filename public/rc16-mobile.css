@@ -1,0 +1,46 @@
+/* BARSA SHOPI v10 RC16 FINAL — Android full-screen fit + low-overdraw UI */
+html,body{max-width:100%;min-height:100%;min-height:var(--barsa-vh,100dvh);overflow-x:hidden}
+.native-android{background:#050a18}
+.native-android body{width:100%;max-width:100%;min-height:var(--barsa-vh,100dvh);overflow-x:hidden;overscroll-behavior-y:none}
+.native-android .workspace{width:100%!important;max-width:1480px;margin-inline:auto;padding-inline:max(10px,env(safe-area-inset-left),env(safe-area-inset-right))!important}
+.native-android .telemetry{min-width:0!important;width:100%}
+.native-android .stage-panel,.native-android .controls-panel{min-width:0;max-width:100%;overflow-x:clip}
+.native-android .stage-panel,.native-android .controls-panel,.native-android .compact-power-card,.native-android .apply-stack-card,.native-android .quick-models-panel,.native-android .compact-stack-panel{box-shadow:none!important}
+.native-android .ambient{display:none!important;filter:none!important}
+.native-android .topbar,.native-android .telemetry,.native-android .master-tabs,.native-android .lab-nav,.native-android .glass-button,.native-android .preview-overlay span,.native-android dialog::backdrop{backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+.native-android .topbar{background:#050a16!important}
+.native-android .telemetry,.native-android .master-tabs{background:#08101f!important}
+.native-android .preview-shell,.native-android .result-panel{overflow:hidden;min-width:0}
+.native-android .preview-shell video,.native-android .preview-shell canvas,.native-android .result-panel video{display:block;width:100%;max-width:100%;height:auto;object-fit:contain}
+.native-android .batch-stage-panel{border-color:rgba(112,255,219,.30);background:#071522}
+.native-android .batch-stage-head b::after{content:' · MULTI';font-size:.68em;color:#8fffe2;margin-inline-start:6px}
+.native-android .batch-stage-grid label{min-width:0;overflow:hidden}
+.native-android #applySelectedStagesBtn:not(:disabled){box-shadow:0 0 0 1px rgba(110,255,221,.16) inset}
+@media(max-width:900px){
+ .native-android .workspace{padding-top:8px!important;padding-bottom:max(88px,calc(72px + env(safe-area-inset-bottom)))!important}
+ .native-android .hero{margin-bottom:10px;padding:12px 10px}
+ .native-android .app-grid{display:block}
+ .native-android .stage-panel{padding:8px;min-height:0;margin-bottom:10px}
+ .native-android .controls-panel{position:relative!important;top:auto!important;padding:10px!important;max-height:none!important;overflow:visible!important}
+ .native-android .dropzone{min-height:min(42dvh,420px)!important;margin:0}
+ .native-android .preview-shell,.native-android .result-panel{min-height:0!important;max-height:none!important}
+ .native-android .preview-shell video,.native-android .preview-shell canvas,.native-android .result-panel video{min-height:0!important;max-height:min(58dvh,560px)!important}
+ .native-android .master-tabs,.native-android .lab-nav{position:relative!important;top:auto!important}
+ .native-android .telemetry{grid-template-columns:repeat(4,minmax(0,1fr));gap:0}
+ .native-android .telemetry div{min-width:0;padding:8px 5px}
+ .native-android .telemetry b{font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .native-android .batch-stage-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+ .native-android .batch-stage-grid label{padding:10px 8px;min-height:42px}
+}
+@media(max-width:430px){
+ .native-android .workspace{padding-inline:6px!important}.native-android .topbar{min-height:56px;padding-inline:7px!important}
+ .native-android .brand{gap:7px}.native-android .brand-mark{width:32px;height:32px}.native-android .brand small{display:none}
+ .native-android .header-actions{gap:5px}.native-android .status-pill{font-size:8px;padding:5px 7px}.native-android .icon-button{width:32px;height:32px}
+ .native-android .hero h1{font-size:22px!important}.native-android .telemetry span{font-size:6px}.native-android .telemetry b{font-size:9px}
+ .native-android .stage-panel,.native-android .controls-panel{border-radius:14px}
+ .native-android .dropzone{min-height:min(38dvh,340px)!important}
+ .native-android .preview-shell video,.native-android .preview-shell canvas,.native-android .result-panel video{max-height:min(52dvh,480px)!important}
+ .native-android .batch-stage-actions{grid-template-columns:1fr 1fr!important}
+ .native-android .batch-stage-actions #applySelectedStagesBtn{grid-column:1/-1!important;min-height:46px;font-weight:900}
+}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}}

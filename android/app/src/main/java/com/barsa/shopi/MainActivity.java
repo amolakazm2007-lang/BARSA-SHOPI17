@@ -1,7 +1,6 @@
 package com.barsa.shopi;
 
 import android.app.*;
-import android.os.Build;
 import android.os.Bundle;
 import android.content.*;
 import android.net.Uri;
@@ -51,8 +50,7 @@ public final class MainActivity extends Activity {
         target.setOnApplyWindowInsetsListener((view, windowInsets) -> {
             if (Build.VERSION.SDK_INT >= 30) {
                 Insets system = windowInsets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
-                Insets ime = windowInsets.getInsets(WindowInsets.Type.ime());
-                view.setPadding(system.left, system.top, system.right, Math.max(system.bottom, ime.bottom));
+                view.setPadding(system.left, system.top, system.right, system.bottom);
             } else {
                 view.setPadding(windowInsets.getSystemWindowInsetLeft(), windowInsets.getSystemWindowInsetTop(),
                     windowInsets.getSystemWindowInsetRight(), windowInsets.getSystemWindowInsetBottom());
@@ -76,10 +74,12 @@ public final class MainActivity extends Activity {
 
     private void configureWebView() {
         WebSettings s = webView.getSettings(); s.setJavaScriptEnabled(true); s.setDomStorageEnabled(true); s.setDatabaseEnabled(true);
-        s.setAllowFileAccess(false); s.setAllowFileAccessFromFileURLs(false); s.setAllowUniversalAccessFromFileURLs(false); s.setAllowContentAccess(true); s.setMediaPlaybackRequiresUserGesture(false); s.setCacheMode(WebSettings.LOAD_DEFAULT);
+        s.setAllowFileAccess(false); s.setAllowContentAccess(true); s.setMediaPlaybackRequiresUserGesture(false); s.setCacheMode(WebSettings.LOAD_DEFAULT);
+        s.setTextZoom(100); s.setUseWideViewPort(true); s.setLoadWithOverviewMode(false);
         s.setJavaScriptCanOpenWindowsAutomatically(false); s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW); s.setSupportZoom(false); s.setBuiltInZoomControls(false); s.setDisplayZoomControls(false);
         if (Build.VERSION.SDK_INT >= 26) s.setSafeBrowsingEnabled(true);
         webView.setBackgroundColor(Color.rgb(2,4,11));
+        webView.setOverScrollMode(View.OVER_SCROLL_NEVER); webView.setVerticalScrollBarEnabled(false); webView.setHorizontalScrollBarEnabled(false);
         webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
             webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, true);
@@ -94,6 +94,11 @@ public final class MainActivity extends Activity {
                     try { startActivity(new Intent(Intent.ACTION_VIEW, uri)); } catch (Exception ignored) {}
                 }
                 return true;
+            }
+            @Override public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                if (!isTrustedAppUri(Uri.parse(url))) return;
+                view.evaluateJavascript("(function(){if(!document.getElementById('barsa-rc16-css')){var l=document.createElement('link');l.id='barsa-rc16-css';l.rel='stylesheet';l.href='/rc16-mobile.css';document.head.appendChild(l)}if(!document.getElementById('barsa-rc16-js')){var s=document.createElement('script');s.id='barsa-rc16-js';s.src='/rc16-mobile.js';s.defer=true;document.head.appendChild(s)}})();", null);
             }
             @Override public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
                 recoverRenderer(detail != null && detail.didCrash());
