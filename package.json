@@ -24,7 +24,7 @@
     "@ffmpeg/ffmpeg": "0.12.15",
     "@ffmpeg/util": "0.12.2",
     "mediabunny": "1.55.5",
-    "onnxruntime-web": "1.22.0"
+    "onnxruntime-web": "1.29.0"
   },
   "devDependencies": {
     "playwright": "1.55.0",
