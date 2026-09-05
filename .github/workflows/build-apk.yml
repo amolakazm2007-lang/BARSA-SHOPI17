@@ -125,13 +125,17 @@ jobs:
       - name: Real Android cold-start crash and ANR gate
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 35
+          api-level: 34
           arch: x86_64
           target: google_apis
-          profile: pixel_6
+          profile: pixel_5
+          cores: 2
+          ram-size: 3072M
+          heap-size: 512M
+          disk-size: 4096M
           disable-animations: true
           force-avd-creation: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
+          emulator-options: -no-snapshot-load -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -camera-front none
           script: |
             set -euo pipefail
             mkdir -p reports
