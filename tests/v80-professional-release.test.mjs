@@ -28,9 +28,9 @@ test('Android final has branded adaptive icon and unified release workflow', asy
   const icon = await readFile(new URL('../android/app/src/main/res/mipmap-anydpi/ic_launcher.xml', import.meta.url), 'utf8');
   assert.match(manifest, /@mipmap\/ic_launcher/);
   assert.match(icon, /<monochrome/);
-  assert.match(gradle, /versionCode 1001501/);
-  assert.match(gradle, /versionName '10\.0\.0-rc15\.1'/);
+  assert.match(gradle, /versionCode 1002000/);
+  assert.match(gradle, /versionName '10\.0\.0'/);
   assert.match(workflow, /:app:assembleDebug :app:assembleRelease/);
   assert.match(workflow, /apksigner/);
-  assert.match(workflow, /BARSA-SHOPI-v10-RC15\.1-release-unsigned/);
+  assert.match(workflow, /BARSA-SHOPI-v10\.0\.0-FINAL-release-unsigned/);
 });
