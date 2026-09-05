@@ -38,13 +38,12 @@ test('v9 final metadata is unified across web Android and GitHub artifacts', () 
   const pkg = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
   const lock = JSON.parse(fs.readFileSync(new URL('../package-lock.json', import.meta.url), 'utf8'));
   const gradle = fs.readFileSync(new URL('../android/app/build.gradle', import.meta.url), 'utf8');
-  const debug = fs.readFileSync(new URL('../.github/workflows/android-build.yml', import.meta.url), 'utf8');
-  const release = fs.readFileSync(new URL('../.github/workflows/android-release.yml', import.meta.url), 'utf8');
+  const workflow = fs.readFileSync(new URL('../.github/workflows/build-apk.yml', import.meta.url), 'utf8');
   assert.equal(pkg.version, '10.0.0-rc15.1');
   assert.equal(lock.version, '10.0.0-rc15.1');
   assert.equal(lock.packages[''].version, '10.0.0-rc15.1');
   assert.match(gradle, /versionCode 1001501/);
   assert.match(gradle, /versionName '10\.0\.0-rc15\.1'/);
-  assert.match(debug, /BARSA-SHOPI-v10-RC15\.1-debug/);
-  assert.match(release, /BARSA-SHOPI-v10-RC15\.1-release/);
+  assert.match(workflow, /BARSA-SHOPI-v10-RC15\.1-FINAL-installable/);
+  assert.match(workflow, /BARSA-SHOPI-v10-RC15\.1-release-unsigned/);
 });
