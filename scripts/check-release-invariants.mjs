@@ -21,7 +21,7 @@ requireText(gradle, "versionName '10.0.0'", 'Android versionName must be 10.0.0'
 requireText(gradle, 'versionCode 1002000', 'Android versionCode must be 1002000');
 if (!/compileSdk\s+3[5-9]/.test(gradle)) failures.push('compileSdk must remain API 35+');
 if (!/targetSdk\s+3[5-9]/.test(gradle)) failures.push('targetSdk must remain API 35+');
-requireText(gradle, "androidx.core:core:1.19.0", 'WindowInsetsCompat dependency must be pinned');
+requireText(gradle, "androidx.core:core:1.17.0", 'WindowInsetsCompat dependency must stay pinned to the API-36-compatible AndroidX Core release');
 
 requireText(manifest, 'android.permission.INTERNET', 'INTERNET permission is required for explicit model downloads');
 forbidText(manifest, 'WRITE_EXTERNAL_STORAGE', 'legacy WRITE_EXTERNAL_STORAGE permission must not be reintroduced');
@@ -36,6 +36,7 @@ requireText(activity, 'removeJavascriptInterface("BarsaAndroid")', 'WebView brid
 requireText(activity, 'isTrustedAppUri', 'WebView native bridge must remain origin-restricted');
 
 requireText(vault, 'user-action-required', 'AI model network provisioning must require user activation');
+requireText(vault, 'EXPLICIT_MODEL_ACTION_IDS', 'background AI downloads must stay blocked unless a dedicated model action is focused');
 requireText(vault, 'cooperativeUiYield', 'heavy model provisioning must cooperatively yield UI time');
 requireText(fabric, 'qualityLocked: true', 'final render plan must declare quality lock');
 requireText(fabric, 'previewMaxFps', 'preview load must remain independently adaptive');
