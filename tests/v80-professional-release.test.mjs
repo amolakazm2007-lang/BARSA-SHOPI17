@@ -21,14 +21,16 @@ test('v8 production UI exposes save/reset session controls', async () => {
   assert.match(html, /جلسة احترافية/);
 });
 
-test('Android final has branded adaptive icon and release workflow', async () => {
+test('Android final has branded adaptive icon and unified release workflow', async () => {
   const manifest = await readFile(new URL('../android/app/src/main/AndroidManifest.xml', import.meta.url), 'utf8');
   const gradle = await readFile(new URL('../android/app/build.gradle', import.meta.url), 'utf8');
-  const workflow = await readFile(new URL('../.github/workflows/android-release.yml', import.meta.url), 'utf8');
+  const workflow = await readFile(new URL('../.github/workflows/build-apk.yml', import.meta.url), 'utf8');
+  const icon = await readFile(new URL('../android/app/src/main/res/mipmap-anydpi/ic_launcher.xml', import.meta.url), 'utf8');
   assert.match(manifest, /@mipmap\/ic_launcher/);
+  assert.match(icon, /<monochrome/);
   assert.match(gradle, /versionCode 1001501/);
   assert.match(gradle, /versionName '10\.0\.0-rc15\.1'/);
-  assert.match(workflow, /assembleRelease/);
+  assert.match(workflow, /:app:assembleDebug :app:assembleRelease/);
   assert.match(workflow, /apksigner/);
-  assert.match(workflow, /BARSA-SHOPI-v10-RC15\.1-release/);
+  assert.match(workflow, /BARSA-SHOPI-v10-RC15\.1-release-unsigned/);
 });
