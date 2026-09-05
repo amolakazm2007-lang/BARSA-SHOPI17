@@ -11,7 +11,7 @@ test('Android build is pinned to Java 17 in source and GitHub Actions', async ()
   assert.match(app, /sourceCompatibility JavaVersion\.VERSION_17/);
   assert.match(app, /targetCompatibility JavaVersion\.VERSION_17/);
   assert.match(workflow, /java-version: '17'/);
-  assert.match(workflow, /BARSA-SHOPI-v10-RC15\.1-FINAL-installable/);
+  assert.match(workflow, /BARSA-SHOPI-v10\.0\.0-FINAL-installable/);
 });
 
 test('audio preservation and audio cleaning are independent real controls', async () => {
