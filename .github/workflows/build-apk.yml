@@ -1,4 +1,4 @@
-name: BARSA SHOPI APK BUILD
+name: BARSA SHOPI FINAL APK BUILD
 
 on:
   workflow_dispatch:
@@ -10,13 +10,13 @@ permissions:
   contents: read
 
 concurrency:
-  group: barsa-shopi-apk-${{ github.ref }}
+  group: barsa-shopi-final-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   build-apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
@@ -57,6 +57,9 @@ jobs:
       - name: Prepare BARSA runtime
         run: npm run prepare:runtime
 
+      - name: Full JavaScript test suite
+        run: npm test
+
       - name: Quality and security gates
         shell: bash
         run: |
@@ -73,51 +76,64 @@ jobs:
       - name: Sync Android
         run: npm run android:sync
 
-      - name: Verify Android project
+      - name: Android lint - debug and release
         shell: bash
         run: |
-          gradle -p android :app:lintDebug \
+          gradle -p android :app:lintDebug :app:lintRelease \
             --stacktrace \
             --no-daemon
 
-      - name: Build Android APK
+      - name: Build debug and release APKs
         shell: bash
         run: |
-          gradle -p android :app:assembleDebug \
+          gradle -p android :app:assembleDebug :app:assembleRelease \
             --stacktrace \
             --no-daemon
 
-      - name: Collect APK
+      - name: Collect and verify APKs
         shell: bash
         run: |
-          mkdir -p release
-          APK="$(find android/app/build/outputs/apk/debug -name '*.apk' | head -n 1)"
+          set -euo pipefail
+          mkdir -p release reports
 
-          if [ -z "$APK" ]; then
-            echo "APK NOT FOUND"
-            find android -type f | tail -n 100
-            exit 1
-          fi
+          DEBUG_APK="$(find android/app/build/outputs/apk/debug -name '*.apk' | head -n 1)"
+          RELEASE_APK="$(find android/app/build/outputs/apk/release -name '*.apk' | head -n 1)"
 
-          cp "$APK" release/BARSA-SHOPI-v10-RC15.1-debug.apk
-          sha256sum release/BARSA-SHOPI-v10-RC15.1-debug.apk \
-            > release/BARSA-SHOPI-v10-RC15.1-debug.sha256
+          test -n "$DEBUG_APK"
+          test -n "$RELEASE_APK"
+
+          cp "$DEBUG_APK" release/BARSA-SHOPI-v10-RC15.1-FINAL-installable.apk
+          cp "$RELEASE_APK" release/BARSA-SHOPI-v10-RC15.1-release-unsigned.apk
+
+          sha256sum release/BARSA-SHOPI-v10-RC15.1-FINAL-installable.apk \
+            > release/BARSA-SHOPI-v10-RC15.1-FINAL-installable.sha256
+          sha256sum release/BARSA-SHOPI-v10-RC15.1-release-unsigned.apk \
+            > release/BARSA-SHOPI-v10-RC15.1-release-unsigned.sha256
+
+          "$ANDROID_HOME/build-tools/36.0.0/zipalign" -c -v 4 \
+            release/BARSA-SHOPI-v10-RC15.1-FINAL-installable.apk \
+            > release/BARSA-SHOPI-v10-RC15.1-FINAL-installable.zipalign.txt
+
           "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs \
-            release/BARSA-SHOPI-v10-RC15.1-debug.apk \
-            > release/BARSA-SHOPI-v10-RC15.1-debug.apksigner.txt
+            release/BARSA-SHOPI-v10-RC15.1-FINAL-installable.apk \
+            > release/BARSA-SHOPI-v10-RC15.1-FINAL-installable.apksigner.txt
+
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging \
+            release/BARSA-SHOPI-v10-RC15.1-FINAL-installable.apk \
+            > release/BARSA-SHOPI-v10-RC15.1-FINAL-installable.badging.txt
 
           cp android/app/build/reports/lint-results-debug.html reports/ 2>/dev/null || true
           cp android/app/build/reports/lint-results-debug.xml reports/ 2>/dev/null || true
+          cp android/app/build/reports/lint-results-release.html reports/ 2>/dev/null || true
+          cp android/app/build/reports/lint-results-release.xml reports/ 2>/dev/null || true
           ls -lh release/ reports/
 
-      - name: Upload APK and reports
+      - name: Upload final APK bundle and reports
         uses: actions/upload-artifact@v4
         with:
-          name: BARSA-SHOPI-v10-RC15.1-APK
+          name: BARSA-SHOPI-v10-RC15.1-FINAL
           path: |
-            release/BARSA-SHOPI-v10-RC15.1-debug.apk
-            release/BARSA-SHOPI-v10-RC15.1-debug.sha256
-            release/BARSA-SHOPI-v10-RC15.1-debug.apksigner.txt
+            release/**
             reports/**
           if-no-files-found: error
-          retention-days: 30
+          retention-days: 90
