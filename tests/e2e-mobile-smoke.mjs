@@ -9,8 +9,18 @@ try {
   browser = await chromium.launch({ headless: true });
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const errors = [];
+  const responseErrors = [];
   page.on('pageerror', e => errors.push(e.message));
-  page.on('console', m => { if (m.type() === 'error' && !m.text().includes('[W:onnxruntime:')) errors.push(m.text()); });
+  page.on('response', response => {
+    if (response.status() >= 400) responseErrors.push(`HTTP ${response.status()} ${response.url()}`);
+  });
+  page.on('console', m => {
+    if (m.type() !== 'error' || m.text().includes('[W:onnxruntime:')) return;
+    // Chromium's generic resource error omits the URL. The response listener
+    // above records the exact status + URL so CI failures remain actionable.
+    if (m.text().includes('Failed to load resource: the server responded with a status of')) return;
+    errors.push(m.text());
+  });
   await page.goto('http://127.0.0.1:4173/', { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('#startBtn', { state: 'attached' });
 
@@ -49,6 +59,7 @@ try {
   if (!(await page.locator('[data-install="upscale"]').isVisible())) throw new Error('Manual upscale model catalog is not reachable');
   await page.click('#closeModelsBtn');
 
+  if (responseErrors.length) errors.push(...responseErrors);
   if (errors.length) throw new Error(`Browser UI errors: ${errors.join(' | ')}`);
   console.log(JSON.stringify({ mobileSmoke: true, multiCount, overflow390, overflow360, renderReachable: true, modelsReachable: true }, null, 2));
 } finally {
