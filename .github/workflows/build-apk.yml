@@ -15,7 +15,7 @@ concurrency:
 jobs:
   build-apk:
     runs-on: ubuntu-latest
-    timeout-minutes: 75
+    timeout-minutes: 90
 
     steps:
       - name: Checkout
@@ -67,7 +67,7 @@ jobs:
       - name: Full JavaScript test suite
         run: npm test
 
-      - name: Source packaging and security gates
+      - name: Source packaging security and release invariant gates
         shell: bash
         run: |
           set -euo pipefail
@@ -75,9 +75,10 @@ jobs:
           npm run check
           npm run final:audit
           npm run check:packaging
-          npm audit --omit=dev --audit-level=critical --json > reports/npm-audit.json
+          npm run check:release-invariants
+          npm audit --omit=dev --audit-level=moderate --json > reports/npm-audit.json
 
-      - name: Deterministic mobile UI verification
+      - name: Deterministic mobile offline UI verification
         shell: bash
         run: |
           set -euo pipefail
@@ -99,8 +100,13 @@ jobs:
           set -euo pipefail
           gradle -p android :app:assembleDebug :app:assembleRelease --stacktrace --no-daemon
 
-      - name: Collect and verify APKs
+      - name: Collect sign and verify APKs
         shell: bash
+        env:
+          SIGNING_KEY_STORE_BASE64: ${{ secrets.SIGNING_KEY_STORE_BASE64 }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
         run: |
           set -euo pipefail
           mkdir -p final/reports
@@ -108,19 +114,44 @@ jobs:
           RELEASE_APK="$(find android/app/build/outputs/apk/release -name '*.apk' | head -n 1)"
           test -s "$DEBUG_APK"
           test -s "$RELEASE_APK"
-          cp "$DEBUG_APK" final/BARSA-SHOPI-v10.0.0-FINAL-installable.apk
-          cp "$RELEASE_APK" final/BARSA-SHOPI-v10.0.0-FINAL-release-unsigned.apk
           BT="$ANDROID_HOME/build-tools/36.0.0"
+
+          cp "$RELEASE_APK" final/BARSA-SHOPI-v10.0.0-FINAL-release-unsigned.apk
+          "$BT/zipalign" -f -p 4 "$RELEASE_APK" final/release-aligned.apk
+
+          SIGNING_MODE="debug-fallback"
+          if [[ -n "${SIGNING_KEY_STORE_BASE64:-}" && -n "${SIGNING_KEY_ALIAS:-}" && -n "${SIGNING_STORE_PASSWORD:-}" ]]; then
+            printf '%s' "$SIGNING_KEY_STORE_BASE64" | base64 --decode > final/release-keystore.jks
+            export BARSA_STORE_PASS="$SIGNING_STORE_PASSWORD"
+            export BARSA_KEY_PASS="${SIGNING_KEY_PASSWORD:-$SIGNING_STORE_PASSWORD}"
+            "$BT/apksigner" sign \
+              --ks final/release-keystore.jks \
+              --ks-key-alias "$SIGNING_KEY_ALIAS" \
+              --ks-pass env:BARSA_STORE_PASS \
+              --key-pass env:BARSA_KEY_PASS \
+              --out final/BARSA-SHOPI-v10.0.0-FINAL-installable.apk \
+              final/release-aligned.apk
+            SIGNING_MODE="production-secret"
+            rm -f final/release-keystore.jks
+          else
+            cp "$DEBUG_APK" final/BARSA-SHOPI-v10.0.0-FINAL-installable.apk
+          fi
+
+          test -s final/BARSA-SHOPI-v10.0.0-FINAL-installable.apk
           "$BT/zipalign" -c -v 4 final/BARSA-SHOPI-v10.0.0-FINAL-installable.apk > final/reports/zipalign.txt
           "$BT/apksigner" verify --verbose --print-certs final/BARSA-SHOPI-v10.0.0-FINAL-installable.apk > final/reports/apksigner.txt
           "$BT/aapt" dump badging final/BARSA-SHOPI-v10.0.0-FINAL-installable.apk > final/reports/badging.txt
+          grep -q "package: name='com.barsa.shopi'" final/reports/badging.txt
+          grep -q "versionName='10.0.0'" final/reports/badging.txt
           sha256sum final/*.apk > final/reports/SHA256SUMS.txt
+          printf '%s\n' "$SIGNING_MODE" > final/reports/signing-mode.txt
           cp reports/npm-audit.json final/reports/
           cp android/app/build/reports/lint-results-debug.html final/reports/ 2>/dev/null || true
           cp android/app/build/reports/lint-results-release.html final/reports/ 2>/dev/null || true
           git archive --format=zip --output=final/BARSA-SHOPI-v10.0.0-FINAL-source.zip HEAD
           zip -u final/BARSA-SHOPI-v10.0.0-FINAL-source.zip package-lock.json
-          printf 'BARSA SHOPI v10.0.0 FINAL\nInstallable APK: BARSA-SHOPI-v10.0.0-FINAL-installable.apk\nUnsigned release APK is included for production-key signing.\nSource and verification reports are included.\n' > final/README-FIRST.txt
+          printf 'BARSA SHOPI v10.0.0 FINAL\nInstallable APK: BARSA-SHOPI-v10.0.0-FINAL-installable.apk\nUnsigned release APK: BARSA-SHOPI-v10.0.0-FINAL-release-unsigned.apk\nSigning mode is recorded in reports/signing-mode.txt.\nSource, lint, audit, APK signature and SHA256 reports are included.\n' > final/README-FIRST.txt
+          rm -f final/release-aligned.apk
 
       - name: Build one downloadable final ZIP
         shell: bash
@@ -130,6 +161,7 @@ jobs:
           zip -r ../BARSA-SHOPI-v10.0.0-FINAL.zip .
           cd ..
           test -s BARSA-SHOPI-v10.0.0-FINAL.zip
+          unzip -t BARSA-SHOPI-v10.0.0-FINAL.zip
           sha256sum BARSA-SHOPI-v10.0.0-FINAL.zip > BARSA-SHOPI-v10.0.0-FINAL.zip.sha256
 
       - name: Upload complete final package
