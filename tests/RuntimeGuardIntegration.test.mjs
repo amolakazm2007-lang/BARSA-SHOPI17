@@ -3,13 +3,14 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 
 const managerSource = await readFile(new URL('../src/engine/EngineManager.js', import.meta.url), 'utf8');
+const guardSource = await readFile(new URL('../src/engine/RuntimeHealthGuard.js', import.meta.url), 'utf8');
 
 test('EngineManager wires RuntimeHealthGuard into every job context', () => {
   assert.match(managerSource, /new RuntimeHealthGuard\(/);
   assert.match(managerSource, /runtimeDecision = this\.runtimeGuard\.evaluate/);
   assert.match(managerSource, /allowNewHeavyAiWork/);
   assert.match(managerSource, /RecoverableResourcePressureError/);
-  assert.match(managerSource, /qualityLocked/);
+  assert.match(guardSource, /qualityLocked:\s*true/);
 });
 
 test('EngineManager exposes bounded queues capped by runtime decision', () => {
