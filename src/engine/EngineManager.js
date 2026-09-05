@@ -35,13 +35,17 @@ import { BoundedAsyncQueue } from './BoundedAsyncQueue.js';
 import { ResourceScope } from './ResourceScope.js';
 
 const TERMINAL_STATES = new Set(['completed', 'failed', 'cancelled']);
+const LAZY_CLEANUP_METHODS = new Set(['destroy', 'dispose', 'release', 'releaseAll', 'releaseMemory', 'terminate', 'close']);
 
 export class EngineManager extends EventTarget {
   constructor() {
     super();
     const storage = new StorageManager();
     const models = new ModelManager();
-    const faceDetector = new FaceDetectorEngine(models);
+    const rife = createLazyEngineHandle('rife', () => new RIFEEngine(models));
+    const upscale = createLazyEngineHandle('upscale', () => new UpscaleEngine(models));
+    const faceDetector = createLazyEngineHandle('faceDetector', () => new FaceDetectorEngine(models));
+    const face = createLazyEngineHandle('face', () => new FaceRestorationEngine(models, faceDetector));
     this.engines = {
       storage,
       performance: new PerformanceManager(this),
@@ -50,10 +54,10 @@ export class EngineManager extends EventTarget {
       webgl: new WebGL2Engine(),
       models,
       nihui: new NihuiModelBridge(),
-      rife: new RIFEEngine(models),
-      upscale: new UpscaleEngine(models),
+      rife,
+      upscale,
       faceDetector,
-      face: new FaceRestorationEngine(models, faceDetector),
+      face,
       audio: new AudioEngine(),
       ffmpeg: new FFmpegEngine(),
       tiles: new TileProcessor(),
@@ -375,6 +379,13 @@ export class EngineManager extends EventTarget {
     return omit(job, ['controller', 'pausePromise', 'resume']);
   }
 
+  peekEngine(name) {
+    const engine = this.engines?.[name];
+    if (!engine) return null;
+    if (engine.__lazyEngineHandle === true) return engine.__peek();
+    return engine;
+  }
+
   pickEffectsEngine() {
     if (!this.capabilities) throw new Error('EngineManager.initialize() must complete first');
     return this.capabilities.webGPU ? 'webgpu' : this.capabilities.webGL2 ? 'webgl2' : 'canvas2d';
@@ -407,10 +418,10 @@ export class EngineManager extends EventTarget {
     this.engines.codecs.close();
     this.engines.gpu.destroy();
     this.engines.webgl.destroy();
-    this.engines.rife.destroy();
-    this.engines.upscale.destroy();
-    this.engines.face.destroy();
-    this.engines.faceDetector.destroy();
+    for (const key of ['rife', 'upscale', 'face', 'faceDetector']) {
+      const engine = this.peekEngine(key);
+      if (engine) await engine.destroy?.();
+    }
     this.engines.temporal.destroy();
     this.engines.qualityMetrics.destroy();
     this.engines.color.destroy();
@@ -453,6 +464,30 @@ export class EngineManager extends EventTarget {
   _emit(type, detail) {
     this.dispatchEvent(new CustomEvent(type, { detail }));
   }
+}
+
+function createLazyEngineHandle(label, factory) {
+  let instance = null;
+  const ensure = () => {
+    if (!instance) instance = factory();
+    return instance;
+  };
+  return new Proxy(Object.create(null), {
+    get(_target, property) {
+      if (property === '__lazyEngineHandle') return true;
+      if (property === '__peek') return () => instance;
+      if (property === '__label') return label;
+      if (property === 'then') return undefined;
+      if (LAZY_CLEANUP_METHODS.has(property) && !instance) return () => undefined;
+      const engine = ensure();
+      const value = engine[property];
+      return typeof value === 'function' ? value.bind(engine) : value;
+    },
+    set(_target, property, value) {
+      ensure()[property] = value;
+      return true;
+    },
+  });
 }
 
 function estimateJobWorkloadMB(options = {}) {
