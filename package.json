@@ -1,6 +1,6 @@
 {
   "name": "video-toolkit-pro",
-  "version": "10.0.0-rc15.1",
+  "version": "10.0.0",
   "private": true,
   "type": "module",
   "description": "BARSA SHOPI professional Android AI video enhancement engine with native ONNX acceleration, temporal processing, blur studio and MP4 export.",
