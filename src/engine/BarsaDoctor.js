@@ -30,6 +30,11 @@ function componentScores(checks, issues) {
   }
   return result;
 }
+function pressureRatio(telemetry = {}) {
+  const heap = Number(telemetry.jsHeapLimitMB) > 0 ? Number(telemetry.jsHeapUsedMB || 0) / Number(telemetry.jsHeapLimitMB) : 0;
+  const gpu = Number(telemetry.gpuBudgetMB) > 0 ? Number(telemetry.gpuAllocatedMB || 0) / Number(telemetry.gpuBudgetMB) : 0;
+  return Math.max(Number.isFinite(heap) ? heap : 0, Number.isFinite(gpu) ? gpu : 0);
+}
 
 /**
  * BARSA Doctor: non-destructive diagnostics + explicitly allow-listed repairs.
@@ -198,7 +203,7 @@ export class BarsaDoctor {
           await this._releaseAiMemory();
           const verified = await this._verifyRepair(action);
           this._recordRepairAttempt(action, verified);
-          repairs.push({ action, status: verified ? 'FIXED' : 'FAILED', verified, error: verified ? null : 'Post-repair verification failed' });
+          repairs.push({ action, status: verified ? 'FIXED' : 'FAILED', verified, error: verified ? null : 'Post-repair memory pressure is still above the safe threshold' });
           continue;
         }
         if (action.startsWith('reverify-model:') || action.startsWith('retest-model:')) {
@@ -261,8 +266,16 @@ export class BarsaDoctor {
     }
     if (action === 'release-ai-memory') {
       const perf = this.manager.engines.performance;
-      await perf.sample?.().catch(() => {});
-      return true; // release methods completed; telemetry is advisory and may lag GC.
+      const deadline = performance.now() + 4000;
+      while (performance.now() < deadline) {
+        await perf.sample?.().catch(() => {});
+        const telemetry = perf.telemetry || {};
+        const pressure = String(telemetry.pressureState || perf._pressureState || 'normal');
+        const ratio = pressureRatio(telemetry);
+        if (pressure !== 'critical' && pressure !== 'high' && ratio < 0.75) return true;
+        await new Promise(resolve => setTimeout(resolve, 250));
+      }
+      return false;
     }
     if (action.startsWith('reverify-model:') || action.startsWith('retest-model:')) {
       const [, , modelId] = action.split(':');
