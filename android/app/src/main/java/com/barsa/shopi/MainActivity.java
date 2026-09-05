@@ -2,6 +2,7 @@ package com.barsa.shopi;
 
 import android.app.*;
 import android.os.Bundle;
+import android.os.Build;
 import android.content.*;
 import android.net.Uri;
 import android.provider.Settings;
@@ -39,7 +40,6 @@ public final class MainActivity extends Activity {
         catch (IOException e) { webView.loadData("<h2>BARSA SHOPI runtime failed</h2>", "text/html", "UTF-8"); }
     }
 
-
     private void configureWindow() {
         getWindow().setStatusBarColor(Color.TRANSPARENT);
         getWindow().setNavigationBarColor(Color.TRANSPARENT);
@@ -50,7 +50,10 @@ public final class MainActivity extends Activity {
         target.setOnApplyWindowInsetsListener((view, windowInsets) -> {
             if (Build.VERSION.SDK_INT >= 30) {
                 Insets system = windowInsets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+                boolean imeVisible = windowInsets.isVisible(WindowInsets.Type.ime());
                 view.setPadding(system.left, system.top, system.right, system.bottom);
+                view.post(() -> view.evaluateJavascript(
+                    "document.documentElement.dataset.imeVisible='" + (imeVisible ? "1" : "0") + "';", null));
             } else {
                 view.setPadding(windowInsets.getSystemWindowInsetLeft(), windowInsets.getSystemWindowInsetTop(),
                     windowInsets.getSystemWindowInsetRight(), windowInsets.getSystemWindowInsetBottom());
@@ -81,7 +84,7 @@ public final class MainActivity extends Activity {
         webView.setBackgroundColor(Color.rgb(2,4,11));
         webView.setOverScrollMode(View.OVER_SCROLL_NEVER); webView.setVerticalScrollBarEnabled(false); webView.setHorizontalScrollBarEnabled(false);
         webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, true);
         }
         webView.addJavascriptInterface(nativeBridge, "BarsaAndroid");
@@ -98,6 +101,9 @@ public final class MainActivity extends Activity {
             @Override public void onPageFinished(WebView view, String url) {
                 super.onPageFinished(view, url);
                 if (!isTrustedAppUri(Uri.parse(url))) return;
+                android.app.ActivityManager am = (android.app.ActivityManager) getSystemService(ACTIVITY_SERVICE);
+                boolean lowRam = am != null && am.isLowRamDevice();
+                view.evaluateJavascript("document.documentElement.dataset.lowRam='" + (lowRam ? "1" : "0") + "';", null);
                 view.evaluateJavascript("(function(){if(!document.getElementById('barsa-rc16-css')){var l=document.createElement('link');l.id='barsa-rc16-css';l.rel='stylesheet';l.href='/rc16-mobile.css';document.head.appendChild(l)}if(!document.getElementById('barsa-rc16-js')){var s=document.createElement('script');s.id='barsa-rc16-js';s.src='/rc16-mobile.js';s.defer=true;document.head.appendChild(s)}})();", null);
             }
             @Override public boolean onRenderProcessGone(WebView view, RenderProcessGoneDetail detail) {
@@ -114,8 +120,6 @@ public final class MainActivity extends Activity {
             }
         });
     }
-
-
 
     private boolean isTrustedAppUri(Uri uri) {
         if (uri == null || assetServer == null) return false;
