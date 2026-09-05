@@ -1,0 +1,92 @@
+name: BARSA SHOPI APK BUILD
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK 36
+        shell: bash
+        run: |
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-36" \
+            "build-tools;36.0.0"
+
+      - name: Setup Gradle 8.11.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Prepare BARSA runtime
+        run: npm run prepare:runtime
+
+      - name: Build web app
+        run: npm run build
+
+      - name: Sync Android
+        run: npm run sync-android
+
+      - name: Build Android APK
+        shell: bash
+        run: |
+          gradle -p android :app:assembleDebug \
+            --stacktrace \
+            --no-daemon
+
+      - name: Collect APK
+        shell: bash
+        run: |
+          mkdir -p release
+          APK="$(find android/app/build/outputs/apk/debug -name '*.apk' | head -n 1)"
+
+          if [ -z "$APK" ]; then
+            echo "APK NOT FOUND"
+            find android -type f | tail -n 100
+            exit 1
+          fi
+
+          cp "$APK" release/BARSA-SHOPI-v10-RC15.1-debug.apk
+          sha256sum release/BARSA-SHOPI-v10-RC15.1-debug.apk \
+            > release/BARSA-SHOPI-v10-RC15.1-debug.sha256
+
+          ls -lh release/
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: BARSA-SHOPI-v10-RC15.1-APK
+          path: |
+            release/BARSA-SHOPI-v10-RC15.1-debug.apk
+            release/BARSA-SHOPI-v10-RC15.1-debug.sha256
+          if-no-files-found: error
+          retention-days: 30
