@@ -52,7 +52,7 @@ public final class MainActivity extends Activity {
                 Insets system = windowInsets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
                 boolean imeVisible = windowInsets.isVisible(WindowInsets.Type.ime());
                 view.setPadding(system.left, system.top, system.right, system.bottom);
-                view.post(() -> view.evaluateJavascript(
+                target.post(() -> target.evaluateJavascript(
                     "document.documentElement.dataset.imeVisible='" + (imeVisible ? "1" : "0") + "';", null));
             } else {
                 view.setPadding(windowInsets.getSystemWindowInsetLeft(), windowInsets.getSystemWindowInsetTop(),
