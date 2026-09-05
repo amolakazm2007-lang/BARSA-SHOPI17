@@ -24,7 +24,7 @@ test('auto model vault installs core models sequentially and skips huge face mod
   assert.deepEqual(calls.filter((x) => x.startsWith('ensure:')), [
     'ensure:upscale:realesr-general-x4v3-turbo',
     'ensure:upscale:onnx-model-zoo-sr-x3',
-    'ensure:rife:rife-tensorstack',
+    'ensure:rife:rife47-emmajohnson311',
   ]);
   assert.equal(calls.includes('ensure:face:gfpgan-1.4'), false);
 });
@@ -44,4 +44,26 @@ test('full vault includes face restoration and keeps going after one model fails
   assert.equal(result.ready, 4);
   assert.equal(result.results.find((x) => x.role === 'rife').ok, false);
   assert.equal(result.results.find((x) => x.role === 'face').ok, true);
+});
+
+test('interactive runtime refuses hidden automatic model provisioning without user activation', async () => {
+  const oldDocument = globalThis.document;
+  const oldNavigator = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  const calls = [];
+  try {
+    globalThis.document = { visibilityState: 'visible' };
+    Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { userActivation: { isActive: false } } });
+    const vault = new AutoModelVault({
+      manager: { engines: {} },
+      provisioner: { async ensure() { calls.push('download'); } },
+      registries: {},
+    });
+    const result = await vault.ensureCore();
+    assert.equal(result.deferred, true);
+    assert.equal(result.reason, 'user-action-required');
+    assert.deepEqual(calls, []);
+  } finally {
+    if (oldDocument === undefined) delete globalThis.document; else globalThis.document = oldDocument;
+    if (oldNavigator) Object.defineProperty(globalThis, 'navigator', oldNavigator); else delete globalThis.navigator;
+  }
 });
