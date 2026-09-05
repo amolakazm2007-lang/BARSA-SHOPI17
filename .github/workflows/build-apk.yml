@@ -5,6 +5,16 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: barsa-shopi-apk-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-apk:
@@ -47,6 +57,16 @@ jobs:
       - name: Install npm dependencies
         run: npm ci
 
+      - name: Quality and security gates
+        shell: bash
+        run: |
+          mkdir -p reports
+          npm run check
+          npm run verify:runtime
+          npm run final:audit
+          npm run check:packaging
+          npm audit --omit=dev --audit-level=critical --json > reports/npm-audit.json
+
       - name: Prepare BARSA runtime
         run: npm run prepare:runtime
 
@@ -55,6 +75,13 @@ jobs:
 
       - name: Sync Android
         run: npm run android:sync
+
+      - name: Verify Android project
+        shell: bash
+        run: |
+          gradle -p android :app:lintDebug \
+            --stacktrace \
+            --no-daemon
 
       - name: Build Android APK
         shell: bash
@@ -78,15 +105,22 @@ jobs:
           cp "$APK" release/BARSA-SHOPI-v10-RC15.1-debug.apk
           sha256sum release/BARSA-SHOPI-v10-RC15.1-debug.apk \
             > release/BARSA-SHOPI-v10-RC15.1-debug.sha256
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose --print-certs \
+            release/BARSA-SHOPI-v10-RC15.1-debug.apk \
+            > release/BARSA-SHOPI-v10-RC15.1-debug.apksigner.txt
 
-          ls -lh release/
+          cp android/app/build/reports/lint-results-debug.html reports/ 2>/dev/null || true
+          cp android/app/build/reports/lint-results-debug.xml reports/ 2>/dev/null || true
+          ls -lh release/ reports/
 
-      - name: Upload APK
+      - name: Upload APK and reports
         uses: actions/upload-artifact@v4
         with:
           name: BARSA-SHOPI-v10-RC15.1-APK
           path: |
             release/BARSA-SHOPI-v10-RC15.1-debug.apk
             release/BARSA-SHOPI-v10-RC15.1-debug.sha256
+            release/BARSA-SHOPI-v10-RC15.1-debug.apksigner.txt
+            reports/**
           if-no-files-found: error
           retention-days: 30
