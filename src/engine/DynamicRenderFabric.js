@@ -50,7 +50,16 @@ export class DynamicRenderFabric {
       384,
       2048,
     );
-    const memoryDecision = this.memoryGovernor?.evaluate?.({ telemetry, capabilities, workloadMB: 0 }) || null;
+    const estimatedWorkloadMB = estimateWorkloadMB({
+      width,
+      height,
+      codecQueue: safetyPlan.codecQueue,
+      tileConcurrency: safetyPlan.tileConcurrency,
+      aiUpscale,
+      rife,
+      face,
+    });
+    const memoryDecision = this.memoryGovernor?.evaluate?.({ telemetry, capabilities, workloadMB: estimatedWorkloadMB }) || null;
     const memoryBudgetMB = memoryDecision?.safeBudgetMB || legacyMemoryBudgetMB;
 
     let tileSize = Number(this.performance?.getAdaptiveSettings?.().tileSize || 256);
@@ -76,14 +85,14 @@ export class DynamicRenderFabric {
     }
 
     // High pressure scales only resource parallelism, never requested quality.
-    if (pressure >= 0.82) {
+    if (pressure >= 0.82 || memoryDecision?.state === 'critical') {
       tileSize = Math.min(tileSize, 192);
       tileConcurrency = 1;
       codecQueue = 1;
       writeBacklog = 1;
       previewMaxFps = 3;
       previewLongEdge = 540;
-    } else if (pressure >= 0.68) {
+    } else if (pressure >= 0.68 || memoryDecision?.state === 'high') {
       tileSize = Math.min(tileSize, 256);
       tileConcurrency = 1;
       codecQueue = Math.min(codecQueue, 2);
@@ -111,6 +120,7 @@ export class DynamicRenderFabric {
       previewMaxFps,
       previewLongEdge,
       memoryBudgetMB: Math.round(memoryBudgetMB),
+      estimatedWorkloadMB: Math.round(estimatedWorkloadMB),
       memoryState: memoryDecision?.state || null,
       storageProfile: this.storageGovernor?.snapshot?.() || null,
       learnedProfile: this.passport?.snapshot?.() ? true : false,
@@ -130,6 +140,17 @@ export class DynamicRenderFabric {
   getHistory() {
     return this._history.slice();
   }
+}
+
+export function estimateWorkloadMB({ width, height, codecQueue = 1, tileConcurrency = 1, aiUpscale = false, rife = false, face = false } = {}) {
+  const pixels = Math.max(1, Number(width || 1) * Number(height || 1));
+  const rgbaFrameMB = pixels * 4 / 1024 / 1024;
+  const baseFrames = Math.max(2, Number(codecQueue || 1) + Number(tileConcurrency || 1));
+  let multiplier = 1;
+  if (aiUpscale) multiplier += 2.25;
+  if (rife) multiplier += 1.75;
+  if (face) multiplier += 1.0;
+  return Math.max(1, rgbaFrameMB * baseFrames * multiplier);
 }
 
 export function snapTile(value) {
