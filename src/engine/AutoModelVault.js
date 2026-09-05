@@ -48,6 +48,7 @@ export class AutoModelVault {
     for (let index = 0; index < plan.length; index++) {
       const item = plan[index];
       this.onProgress?.({ stage: 'model-start', index, total: plan.length, ...item });
+      await cooperativeUiYield();
       try {
         const result = await this._ensureItem(item);
         results.push({ ...item, ok: true, ...result });
@@ -57,7 +58,10 @@ export class AutoModelVault {
         this.onProgress?.({ stage: 'model-error', index, total: plan.length, error, ...item });
       }
       // Release transient inference sessions between large model validations.
+      // Yield twice: once after destruction so GC/driver cleanup can progress,
+      // then once at a paint boundary so model provisioning never monopolizes UI.
       await this._releaseTransient(item.role);
+      await cooperativeUiYield({ paint: true });
     }
     return {
       ok: results.every((item) => item.ok),
@@ -104,6 +108,23 @@ export class AutoModelVault {
     if (role === 'rife') this.manager.engines.rife?.destroy?.();
     if (role === 'face') this.manager.engines.face?.destroy?.();
     if (role === 'faceDetector') this.manager.engines.faceDetector?.destroy?.();
+    await cooperativeUiYield();
+  }
+}
+
+/**
+ * Give input, layout and paint a chance to run between heavyweight model jobs.
+ * scheduler.yield() is used when available; all Android WebView/Chromium builds
+ * retain a zero-delay fallback. `paint` additionally waits for one frame in a
+ * visible document. This only changes scheduling, never model/output quality.
+ */
+export async function cooperativeUiYield({ paint = false } = {}) {
+  if (globalThis.scheduler?.yield) {
+    await globalThis.scheduler.yield();
+  } else {
     await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+  if (paint && typeof globalThis.requestAnimationFrame === 'function' && globalThis.document?.visibilityState !== 'hidden') {
+    await new Promise((resolve) => globalThis.requestAnimationFrame(() => resolve()));
   }
 }
