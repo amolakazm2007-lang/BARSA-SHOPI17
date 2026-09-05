@@ -2,11 +2,18 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { CircuitBreaker, defaultRetryable, retryTransient, withTimeout } from '../src/engine/OperationGuard.js';
 
-test('withTimeout aborts stalled operations', async () => {
+test('withTimeout aborts cooperative stalled operations', async () => {
   await assert.rejects(
     withTimeout(signal => new Promise((resolve, reject) => {
       signal.addEventListener('abort', () => reject(signal.reason), { once: true });
     }), { timeoutMs: 10, label: 'stalled-op' }),
+    error => error?.name === 'TimeoutError',
+  );
+});
+
+test('withTimeout rejects even when a legacy operation ignores AbortSignal', async () => {
+  await assert.rejects(
+    withTimeout(() => new Promise(() => {}), { timeoutMs: 10, label: 'legacy-stall' }),
     error => error?.name === 'TimeoutError',
   );
 });
