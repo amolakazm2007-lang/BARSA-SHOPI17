@@ -10,14 +10,21 @@ try {
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const errors = [];
   const responseErrors = [];
+  const externalRequests = [];
   page.on('pageerror', e => errors.push(e.message));
+  page.on('request', request => {
+    try {
+      const url = new URL(request.url());
+      if ((url.protocol === 'http:' || url.protocol === 'https:') && !['127.0.0.1', 'localhost'].includes(url.hostname)) {
+        externalRequests.push(`${request.method()} ${url.origin}${url.pathname}`);
+      }
+    } catch {}
+  });
   page.on('response', response => {
     if (response.status() >= 400) responseErrors.push(`HTTP ${response.status()} ${response.url()}`);
   });
   page.on('console', m => {
     if (m.type() !== 'error' || m.text().includes('[W:onnxruntime:')) return;
-    // Chromium's generic resource error omits the URL. The response listener
-    // above records the exact status + URL so CI failures remain actionable.
     if (m.text().includes('Failed to load resource: the server responded with a status of')) return;
     errors.push(m.text());
   });
@@ -35,22 +42,16 @@ try {
 
   const multiCount = await page.locator('[data-batch-stage]').count();
   if (multiCount < 6) throw new Error(`Multi-Select stage count too low: ${multiCount}`);
-  const overflow390 = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-  if (overflow390 > 1) throw new Error(`390px mobile overflow: ${overflow390}px`);
+  await assertNoHorizontalOverflow(page, 390);
 
   await page.setViewportSize({ width: 360, height: 740 });
   await page.waitForTimeout(100);
-  const overflow360 = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-  if (overflow360 > 1) throw new Error(`360px mobile overflow: ${overflow360}px`);
+  await assertNoHorizontalOverflow(page, 360);
 
-  // Render action must remain reachable on the compact mobile layout.
   await page.click('[data-master-target="render"]');
   await page.waitForTimeout(120);
   if (!(await page.locator('#startBtn').isVisible())) throw new Error('Render action is unreachable after opening Render at 360px');
 
-  // The models launcher belongs to the Enhance pane. Navigate there exactly as a
-  // phone user would instead of attempting to click the now-hidden control from
-  // the Render pane.
   await page.click('[data-master-target="enhance"]');
   await page.waitForTimeout(120);
   if (!(await page.locator('#modelsBtn').isVisible())) throw new Error('Models launcher is unreachable after opening Enhance at 360px');
@@ -59,12 +60,29 @@ try {
   if (!(await page.locator('[data-install="upscale"]').isVisible())) throw new Error('Manual upscale model catalog is not reachable');
   await page.click('#closeModelsBtn');
 
+  // Very narrow Android devices must remain usable, not merely un-clipped at 360px.
+  await page.setViewportSize({ width: 320, height: 640 });
+  await page.waitForTimeout(120);
+  await assertNoHorizontalOverflow(page, 320);
+  await page.click('[data-master-target="render"]');
+  await page.waitForTimeout(100);
+  if (!(await page.locator('#startBtn').isVisible())) throw new Error('Render action is unreachable at 320px');
+
+  // Boot/navigation must be deterministic and offline-safe. Model downloads are
+  // explicit user actions and must never happen during application startup or
+  // merely by opening the model catalog.
+  if (externalRequests.length) errors.push(`Unexpected startup/catalog network requests: ${[...new Set(externalRequests)].join(' | ')}`);
   if (responseErrors.length) errors.push(...responseErrors);
   if (errors.length) throw new Error(`Browser UI errors: ${errors.join(' | ')}`);
-  console.log(JSON.stringify({ mobileSmoke: true, multiCount, overflow390, overflow360, renderReachable: true, modelsReachable: true }, null, 2));
+  console.log(JSON.stringify({ mobileSmoke: true, multiCount, widths: [390, 360, 320], renderReachable: true, modelsReachable: true, offlineBoot: true }, null, 2));
 } finally {
   await browser?.close();
   server.kill('SIGTERM');
+}
+
+async function assertNoHorizontalOverflow(page, width) {
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+  if (overflow > 1) throw new Error(`${width}px mobile overflow: ${overflow}px`);
 }
 
 async function waitForServer(url) {
