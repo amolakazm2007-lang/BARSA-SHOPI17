@@ -27,7 +27,7 @@
     "onnxruntime-web": "1.22.0"
   },
   "devDependencies": {
-    "playwright": "1.55.0",
+    "playwright": "1.62.1",
     "vite": "6.1.0"
   },
   "engines": {
