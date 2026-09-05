@@ -54,7 +54,7 @@ jobs:
         run: npm run build
 
       - name: Sync Android
-        run: npm run sync-android
+        run: npm run android:sync
 
       - name: Build Android APK
         shell: bash
