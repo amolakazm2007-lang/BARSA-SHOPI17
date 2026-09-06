@@ -38,10 +38,22 @@ try {
   const previewBackend = await page.locator('#previewBackendBadge').textContent();
   await page.click('#compareBtn');
   const before = await page.locator('#outputCanvas').evaluate((canvas) => canvas.toDataURL());
-  await page.locator('#cl-exposure').evaluate((input) => { input.closest('details').open = true; });
+
+  // Exercise advanced controls exactly through the user-visible Compact Pro UI.
+  // Do not force hidden slider values: this gate must prove that the real UI can
+  // reveal the controls and that those controls update the live preview.
+  const colorAdvanced = page.locator('[data-compact-advanced="color"]').first();
+  if (!await colorAdvanced.isVisible()) throw new Error('Advanced Color action is not visible');
+  await colorAdvanced.click();
+  await page.locator('#cl-exposure').waitFor({ state: 'visible', timeout: 10_000 });
   await page.locator('#cl-exposure').fill('0.75');
   await page.locator('#cl-dehaze').fill('0.35');
   await page.locator('#cl-highlights').fill('-0.25');
+
+  const qualityAdvanced = page.locator('[data-compact-advanced="quality"]').first();
+  if (!await qualityAdvanced.isVisible()) throw new Error('Advanced Quality action is not visible');
+  await qualityAdvanced.click();
+  await page.locator('#ql-temporalDenoise').waitFor({ state: 'visible', timeout: 10_000 });
   await page.locator('#ql-temporalDenoise').fill('0.2');
   await page.locator('#ql-antiFlicker').fill('0.15');
   await page.waitForTimeout(250);
