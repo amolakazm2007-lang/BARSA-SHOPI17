@@ -64,6 +64,13 @@ jobs:
       - name: Install exact dependencies
         run: npm ci --no-audit --no-fund
 
+      - name: Validate cold-start gate contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n scripts/android-coldstart-gate.sh
+          node --test tests/AndroidColdStartGate.test.mjs
+
       - name: Verify runtime and full JavaScript suite
         shell: bash
         run: |
@@ -118,7 +125,11 @@ jobs:
           test -f reports/android-emulator-booted.txt
           test -f reports/android-script-entered.txt
           test -f reports/android-apk-installed.txt
-          for PASS in 1 2 3; do test -f "reports/android-launch-${PASS}-pid.txt"; done
+          test -f reports/android-boot-id.txt
+          for PASS in 1 2 3; do
+            test -f "reports/android-launch-${PASS}-pid.txt"
+            test -f "reports/android-launch-${PASS}-boot-id.txt"
+          done
           test -s reports/android-logcat.txt
           test -s reports/android-meminfo.txt
           grep -qx 'PASSED' reports/android-coldstart-gate.txt
