@@ -1,0 +1,106 @@
+name: BARSA Phase1 Installable APK Candidate
+
+on:
+  push:
+    branches: [ crashproof-phase1-professional ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: barsa-phase1-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-installable-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+
+    steps:
+      - name: Checkout exact branch commit
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Setup Gradle 8.11.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Install exact dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Prepare runtime
+        run: npm run prepare:runtime && npm run verify:runtime
+
+      - name: Full JavaScript tests
+        run: npm test
+
+      - name: Release invariants and audit
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run check
+          npm run final:audit
+          npm run check:packaging
+          npm run check:release-invariants
+          npm audit --omit=dev --audit-level=critical
+
+      - name: Build and sync Android runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run build
+          node scripts/sync-android.mjs
+
+      - name: Android lint and unit tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle -p android :app:lintDebug :app:lintRelease :app:testDebugUnitTest --stacktrace --no-daemon
+
+      - name: Assemble installable debug and release evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle -p android :app:assembleDebug :app:assembleRelease --stacktrace --no-daemon
+          mkdir -p apk-out
+          DEBUG_APK="$(find android/app/build/outputs/apk/debug -name '*.apk' | head -n 1)"
+          RELEASE_APK="$(find android/app/build/outputs/apk/release -name '*.apk' | head -n 1)"
+          test -s "$DEBUG_APK"
+          test -s "$RELEASE_APK"
+          cp "$DEBUG_APK" apk-out/BARSA-SHOPI-PHASE1-installable-debug.apk
+          cp "$RELEASE_APK" apk-out/BARSA-SHOPI-PHASE1-release-unsigned.apk
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging apk-out/BARSA-SHOPI-PHASE1-installable-debug.apk > apk-out/badging.txt
+          grep -q "package: name='com.barsa.shopi'" apk-out/badging.txt
+          sha256sum apk-out/*.apk > apk-out/SHA256SUMS.txt
+          git rev-parse HEAD > apk-out/COMMIT.txt
+
+      - name: Upload installable APK candidate
+        uses: actions/upload-artifact@v4
+        with:
+          name: BARSA-SHOPI-PHASE1-APK-${{ github.sha }}
+          path: apk-out/
+          if-no-files-found: error
+          retention-days: 30
