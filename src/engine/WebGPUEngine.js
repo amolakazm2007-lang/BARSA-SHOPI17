@@ -6,7 +6,7 @@ const PARAM_FLOATS = 40;
 const PARAM_BUFFER_SIZE = PARAM_FLOATS * 4;
 
 export class WebGPUEngine {
-  constructor() {
+  constructor({ faultReporter = null } = {}) {
     this.device = null;
     this.context = null;
     this.pipeline = null;
@@ -19,13 +19,39 @@ export class WebGPUEngine {
     this.bindGroup = null;
     this.deviceLost = false;
     this.onFatalLoss = null;
+    this.faultReporter = faultReporter;
     this.performanceManager = null;
     this.lossGuard = new GPUDeviceLossGuard();
     this.lossGuard.addEventListener('lost', ({ detail }) => {
       this.deviceLost = true;
-      console.error('[BARSA][WebGPU] device lost; graphics policy must fall back to WebGL2/Canvas2D', detail);
-      this.onFatalLoss?.(detail);
+      const error = detail instanceof Error
+        ? detail
+        : new BarsaError('GPU_DEVICE_LOST', detail?.message || 'WebGPU device was lost', { recoverable: true, details: detail || null });
+      this._reportFatal('GPU_DEVICE_LOST', error, { detail });
     });
+  }
+
+  setFaultReporter(faultReporter) {
+    this.faultReporter = faultReporter || null;
+    return this;
+  }
+
+  _reportFatal(code, error, details = {}) {
+    const payload = {
+      subsystem: 'gpu',
+      recoverable: error?.recoverable !== false,
+      error,
+      source: 'WebGPUEngine',
+      ...details,
+    };
+    this.faultReporter?.warning?.(code, payload);
+    try {
+      this.onFatalLoss?.(error);
+    } catch (callbackError) {
+      this.faultReporter?.warning?.('GPU_FATAL_CALLBACK_FAILED', {
+        subsystem: 'gpu', recoverable: true, error: callbackError, source: 'WebGPUEngine', originalCode: code,
+      });
+    }
   }
 
   async init(canvas, { performanceManager = null } = {}) {
@@ -74,12 +100,13 @@ export class WebGPUEngine {
         if (error) {
           const code = kind === 'out-of-memory' ? 'GPU_OUT_OF_MEMORY' : 'GPU_VALIDATION_ERROR';
           const wrapped = new BarsaError(code, `WebGPU ${stage} ${kind} error: ${error.message || error}`, { recoverable: true, cause: error });
-          console.error(`[BARSA][WebGPU][${stage}]`, wrapped);
           this.deviceLost = true;
-          this.onFatalLoss?.(wrapped);
+          this._reportFatal(code, wrapped, { stage });
         }
       } catch (error) {
-        console.error(`[BARSA][WebGPU][${stage}][error-scope-failed]`, error);
+        this.faultReporter?.warning?.('GPU_ERROR_SCOPE_FAILED', {
+          subsystem: 'gpu', recoverable: true, error, source: 'WebGPUEngine', stage,
+        });
       }
     }
   }
@@ -182,9 +209,8 @@ export class WebGPUEngine {
       this.performanceManager?.setGPUAllocation(width * height * 4 + PARAM_BUFFER_SIZE);
     } catch (error) {
       const wrapped = error instanceof BarsaError ? error : new BarsaError('WEBGPU_FRAME_FAILED', `WebGPU frame failed: ${error?.message || error}`, { recoverable: true, cause: error });
-      console.error('[BARSA][WebGPU][frame-failed]', wrapped);
       this.deviceLost = true;
-      this.onFatalLoss?.(wrapped);
+      this._reportFatal(wrapped.code || 'WEBGPU_FRAME_FAILED', wrapped, { stage: 'frame' });
       throw wrapped;
     } finally {
       void this._drainErrorScopes('frame');
