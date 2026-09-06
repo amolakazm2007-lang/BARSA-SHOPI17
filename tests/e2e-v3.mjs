@@ -23,10 +23,15 @@ try {
   await page.click('#modelsBtn');
   await page.waitForSelector('#modelsDialog[open]');
 
-  // CI must be deterministic: verify the trusted catalog action exists, but do not make
-  // a third-party model host a release gate. Download retry + SHA integrity are unit-tested.
-  const catalogAction = await page.locator('[data-install="upscale"]').textContent();
-  if (!catalogAction.includes('240 KB')) throw new Error('Trusted mobile model download is not exposed in the UI');
+  // Verify the real trusted catalog action is exposed and interactive. The
+  // release gate intentionally does not depend on a presentation string such
+  // as a model byte-size label, which may legitimately change with catalog updates.
+  const catalogButton = page.locator('[data-install="upscale"]');
+  if (await catalogButton.count() !== 1) throw new Error('Trusted upscale catalog action is missing or duplicated');
+  if (!await catalogButton.isVisible()) throw new Error('Trusted upscale catalog action is not visible to the user');
+  if (!await catalogButton.isEnabled()) throw new Error('Trusted upscale catalog action is disabled');
+  const catalogAction = (await catalogButton.textContent() || '').trim();
+  if (!catalogAction) throw new Error('Trusted upscale catalog action has no user-visible label');
 
   await page.locator('#upscaleEnabled').evaluate((input) => { input.checked = false; input.dispatchEvent(new Event('change', { bubbles: true })); });
   await page.setInputFiles('#nihuiModelInput', [
