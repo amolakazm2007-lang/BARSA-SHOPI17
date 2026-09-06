@@ -16,11 +16,13 @@ test('ResourceScope releases tracked resources in reverse order', async () => {
 });
 
 test('EngineManager gives every render job deterministic resource ownership', () => {
-  assert.match(managerSource, /new ResourceScope\(`job:\$\{jobId\}`\)/);
-  assert.match(managerSource, /trackResource: \(resource\) => resourceScope\.track\(resource\)/);
-  assert.match(managerSource, /releaseResource: \(resource\) => resourceScope\.release\(resource\)/);
+  assert.match(managerSource, /new ResourceScope\(`job:\$\{jobId\}`,\s*\{/);
+  assert.match(managerSource, /onFault:\s*\(fault\)\s*=>\s*this\.faultReporter\.warning\(/);
+  assert.match(managerSource, /trackResource:\s*\(resource\)\s*=>\s*resourceScope\.track\(resource\)/);
+  assert.match(managerSource, /releaseResource:\s*\(resource\)\s*=>\s*resourceScope\.release\(resource\)/);
+  assert.match(managerSource, /releaseResourceAsync:\s*\(resource\)\s*=>\s*resourceScope\.releaseAsync\(resource\)/);
   assert.match(managerSource, /await resourceScope\.close\(\)/);
-  assert.match(managerSource, /RESOURCE_RELEASE_FAILED/);
+  assert.match(managerSource, /RESOURCE_SCOPE_CLOSE_FAILED/);
 });
 
 test('successful jobs close resources before becoming completed', () => {
