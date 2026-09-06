@@ -35,6 +35,7 @@ import { RuntimeHealthGuard } from './RuntimeHealthGuard.js';
 import { BoundedAsyncQueue } from './BoundedAsyncQueue.js';
 import { ResourceScope } from './ResourceScope.js';
 import { RuntimeFaultLedger } from './RuntimeFaultLedger.js';
+import { RuntimeFaultReporter } from './RuntimeFaultReporter.js';
 
 const TERMINAL_STATES = new Set(['completed', 'failed', 'cancelled']);
 const LAZY_CLEANUP_METHODS = new Set(['destroy', 'dispose', 'release', 'releaseAll', 'releaseMemory', 'terminate', 'close']);
@@ -94,6 +95,12 @@ export class EngineManager extends EventTarget {
     this.jobs = new Map();
     this.activeJobId = null;
     this.faultLedger = new RuntimeFaultLedger({ maxEntries: 240, maxGroups: 96 });
+    this.faultReporter = new RuntimeFaultReporter({
+      ledger: this.faultLedger,
+      eventTarget: this,
+      source: 'EngineManager',
+      getActiveJobId: () => this.activeJobId,
+    });
     this.deviceTest = new FullDeviceTestEngine(this);
     this.doctor = new BarsaDoctor(this);
   }
@@ -143,17 +150,17 @@ export class EngineManager extends EventTarget {
       nativeAAC: false,
     };
     const [deviceProfile, codecs, h264Matrix, nativeAAC] = await Promise.all([
-      this.engines.hardware.detectProfile().catch((error) => { this._emit('warning', { code: 'HARDWARE_PROFILE_PROBE_FAILED', error: serializeError(error) }); return null; }),
-      capabilities.webCodecs ? getSupportedCodecs().catch((error) => { this._emit('warning', { code: 'CODEC_PROBE_FAILED', error: serializeError(error) }); return []; }) : [],
-      capabilities.webCodecs ? this.engines.hardware.probeH264().catch((error) => { this._emit('warning', { code: 'H264_PROBE_FAILED', error: serializeError(error) }); return []; }) : [],
-      capabilities.audioCodecs ? supportsNativeAAC().catch((error) => { this._emit('warning', { code: 'AAC_PROBE_FAILED', error: serializeError(error) }); return false; }) : false,
+      this.engines.hardware.detectProfile().catch((error) => { this._emit('warning', { code: 'HARDWARE_PROFILE_PROBE_FAILED', error }); return null; }),
+      capabilities.webCodecs ? getSupportedCodecs().catch((error) => { this._emit('warning', { code: 'CODEC_PROBE_FAILED', error }); return []; }) : [],
+      capabilities.webCodecs ? this.engines.hardware.probeH264().catch((error) => { this._emit('warning', { code: 'H264_PROBE_FAILED', error }); return []; }) : [],
+      capabilities.audioCodecs ? supportsNativeAAC().catch((error) => { this._emit('warning', { code: 'AAC_PROBE_FAILED', error }); return false; }) : false,
     ]);
     capabilities.deviceProfile = deviceProfile;
     capabilities.webCodecsCodecs = codecs;
     capabilities.h264Matrix = h264Matrix;
     capabilities.nativeAAC = nativeAAC;
     try { capabilities.webGL2 = Boolean(document.createElement('canvas').getContext('webgl2')); }
-    catch (error) { this._emit('warning', { code: 'WEBGL2_PROBE_FAILED', error: serializeError(error) }); }
+    catch (error) { this._emit('warning', { code: 'WEBGL2_PROBE_FAILED', error }); }
     if (navigator.gpu) {
       try {
         const adapter = await navigator.gpu.requestAdapter({ powerPreference: 'high-performance' });
@@ -168,7 +175,7 @@ export class EngineManager extends EventTarget {
           };
         }
       } catch (error) {
-        this._emit('warning', { code: 'WEBGPU_ADAPTER_FAILED', error: serializeError(error) });
+        this._emit('warning', { code: 'WEBGPU_ADAPTER_FAILED', error });
       }
     }
     return capabilities;
@@ -228,7 +235,9 @@ export class EngineManager extends EventTarget {
     const heavyAi = hasHeavyAi(job.options);
     const doctorDecision = this.doctorControlPlane.assessRuntime({ capabilities: this.capabilities || {}, workloadMB, heavyAi, jobId });
     const runtimeDecision = doctorDecision.runtimeDecision;
-    const resourceScope = new ResourceScope(`job:${jobId}`);
+    const resourceScope = new ResourceScope(`job:${jobId}`, {
+      onFault: (fault) => this.faultReporter.warning(fault.code, { ...fault, jobId, source: 'ResourceScope' }),
+    });
     let resourcesClosed = false;
     const context = {
       signal: job.controller.signal,
@@ -241,6 +250,7 @@ export class EngineManager extends EventTarget {
       resources: resourceScope,
       trackResource: (resource) => resourceScope.track(resource),
       releaseResource: (resource) => resourceScope.release(resource),
+      releaseResourceAsync: (resource) => resourceScope.releaseAsync(resource),
       createBoundedQueue: (capacity = runtimeDecision.queueCap) => new BoundedAsyncQueue(Math.min(Math.max(1, capacity), runtimeDecision.queueCap)),
       update: (patch) => this.updateJob(jobId, patch),
       checkpoint: (patch) => this.checkpoint(jobId, patch),
@@ -275,13 +285,14 @@ export class EngineManager extends EventTarget {
       job.error = serializeError(error);
       job.state = job.controller.signal.aborted ? 'cancelled' : 'failed';
       job.stage = job.state;
+      if (!job.controller.signal.aborted) this._emit('error', { code: error?.code || 'JOB_FAILED', jobId, error });
       throw error;
     } finally {
       if (!resourcesClosed) {
         try {
           await resourceScope.close();
         } catch (cleanupError) {
-          this._emit('warning', { code: 'RESOURCE_RELEASE_FAILED', jobId, error: serializeError(cleanupError) });
+          this.faultReporter.warning('RESOURCE_SCOPE_CLOSE_FAILED', { subsystem: 'lifecycle', jobId, error: cleanupError, source: 'EngineManager' });
         }
       }
       job.updatedAt = Date.now();
@@ -451,7 +462,7 @@ export class EngineManager extends EventTarget {
     try {
       return await operation();
     } catch (error) {
-      this._emit('warning', { code: 'BEST_EFFORT_OPERATION_FAILED', label, error: serializeError(error) });
+      this._emit('warning', { code: 'BEST_EFFORT_OPERATION_FAILED', label, error });
       return fallback;
     }
   }
@@ -474,20 +485,12 @@ export class EngineManager extends EventTarget {
   }
 
   _emit(type, detail) {
-    if ((type === 'warning' || type === 'error') && this.faultLedger) {
+    if (type === 'warning' || type === 'error') {
       const code = detail?.code || (type === 'error' ? 'RUNTIME_ERROR' : 'RUNTIME_WARNING');
-      this.faultLedger.record({
-        code,
-        subsystem: detail?.subsystem || inferFaultSubsystem(code),
-        severity: type === 'error' ? 'error' : detail?.severity || 'warning',
-        jobId: detail?.jobId || this.activeJobId || null,
-        recoverable: detail?.recoverable ?? detail?.error?.recoverable ?? null,
-        message: detail?.message || detail?.error?.message || detail?.label || code,
-        details: detail,
-        source: 'EngineManager',
-      });
+      return this.faultReporter.report(type, code, detail || {});
     }
     this.dispatchEvent(new CustomEvent(type, { detail }));
+    return detail;
   }
 }
 
@@ -527,7 +530,7 @@ function estimateJobWorkloadMB(options = {}) {
 
 function hasHeavyAi(options = {}) {
   const text = JSON.stringify(options || {}).toLowerCase();
-  return /"(upscale|rife|face|aienabled|upscaleenabled|rifeenabled|faceenabled)"\s*:\s*(true|"on"|1)/.test(text);
+  return /\"(upscale|rife|face|aienabled|upscaleenabled|rifeenabled|faceenabled)\"\s*:\s*(true|\"on\"|1)/.test(text);
 }
 
 function omit(object, keys) {
@@ -541,18 +544,6 @@ function structuredCloneSafe(value) {
   } catch {
     return JSON.parse(JSON.stringify(value));
   }
-}
-
-function inferFaultSubsystem(code) {
-  const value = String(code || '').toUpperCase();
-  if (value.includes('GPU') || value.includes('WEBGL')) return 'gpu';
-  if (value.includes('CODEC') || value.includes('ENCODER') || value.includes('DECODER')) return 'webcodecs';
-  if (value.includes('FFMPEG') || value.includes('REMUX')) return 'ffmpeg';
-  if (value.includes('MODEL') || value.includes('ORT') || value.includes('ONNX') || value.includes('AI_')) return 'ai';
-  if (value.includes('STORAGE') || value.includes('OPFS') || value.includes('CHECKPOINT')) return 'storage';
-  if (value.includes('MEMORY') || value.includes('THERMAL') || value.includes('PRESSURE')) return 'resources';
-  if (value.includes('WORKER')) return 'worker';
-  return 'runtime';
 }
 
 function serializeError(error) {
