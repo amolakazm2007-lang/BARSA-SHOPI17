@@ -64,6 +64,7 @@ export class VideoPipeline {
     let nativeMuxFailure = null;
     let watchdogError = null;
     let renderWatchdog = null;
+    let rifeWorkspace = null;
     const crashFallback = new CrashProofFallbackPolicy();
     const reportCrashProofFailure = (error, fallback = null) => {
       console.error('[BARSA][crash-proof]', error);
@@ -627,7 +628,7 @@ export class VideoPipeline {
 
       let sceneCutsProtected = 0;
       let staticInterpolationSkips = 0;
-      const rifeWorkspace = rifeActive ? new RifeFrameWorkspace(nativeWidth, nativeHeight) : null;
+      rifeWorkspace = rifeActive ? new RifeFrameWorkspace(nativeWidth, nativeHeight) : null;
       sceneDetector = rifeActive && settings.protectSceneCuts !== false ? new SceneChangeDetector() : null;
       const interpolate = rifeActive
         ? async (a, b, t, timestamp) => {

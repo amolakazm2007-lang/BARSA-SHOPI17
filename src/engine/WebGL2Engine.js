@@ -157,7 +157,7 @@ void main(){
   float rangeGate=1.-smoothstep(.035,.22,distance(c,(n+so+e+w)*.25));c=mix(c,(n+so+e+w)*.25,boundary*rangeGate*u_deblock*.48);
   if(u_chroma_denoise>0.){vec3 avg=(c*4.+n+so+e+w)/8.;float lc=lum(c),la=lum(avg);vec3 preserve=avg+vec3(lc-la);float chromaDelta=distance(c-vec3(lc),avg-vec3(la));float gate=1.-smoothstep(.16,.42,chromaDelta);c=mix(c,preserve,clamp(u_chroma_denoise*gate*.72,0.,.82));}
   float artifactGate=1.-smoothstep(.08,.28,distance(c,blur));c=mix(c,blur,u_artifact*artifactGate*.34);
-  vec3 far=(s(vec2(-2,0))+s(vec2(2,0))+s(vec2(0,-2))+s(vec2(0,2)))*.25;float flat=1.-smoothstep(.012,.075,distance(c,far));c=mix(c,far,u_deband*flat*.3)+vec3((hash(pixel)-.5)*u_deband/1024.);
+  vec3 far=(s(vec2(-2,0))+s(vec2(2,0))+s(vec2(0,-2))+s(vec2(0,2)))*.25;float flatRegion=1.-smoothstep(.012,.075,distance(c,far));c=mix(c,far,u_deband*flatRegion*.3)+vec3((hash(pixel)-.5)*u_deband/1024.);
   float edge=abs(lum(e)-lum(w))+abs(lum(so)-lum(n));c=mix(c,blur,skin(c)*u_smooth*(1.-smoothstep(.05,.2,edge)));
   float detailLoad=u_detail*.35+u_fine*.42+u_texture_recovery*.2+u_detail_fusion*.38+u_edge_recovery*.3+u_clarity*.28+u_local_contrast*.2;
   c+=(c-blur)*(u_sharpen+detailLoad);
