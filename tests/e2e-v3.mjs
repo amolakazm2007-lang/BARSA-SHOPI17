@@ -61,15 +61,18 @@ try {
   const after = await page.locator('#outputCanvas').evaluate((canvas) => canvas.toDataURL());
   if (before === after) throw new Error('Advanced filters did not change preview pixels');
 
+  // Output container belongs to the Studio pane. Validate it while the user can
+  // actually see that control, then move to the Export pane to start rendering.
   await page.click('[data-master-target="studio"]');
   await page.waitForSelector('[data-master-panel="studio"]:not([hidden])');
   await page.selectOption('#resolution', 'original');
   await page.selectOption('#targetFps', 'original');
   await page.selectOption('#quality', 'LOW');
+  await page.selectOption('#outputFormat', 'mp4');
+  if (await page.locator('#outputFormat').inputValue() !== 'mp4') throw new Error('Studio output container did not remain MP4');
 
   await page.click('[data-master-target="render"]');
   await page.waitForSelector('[data-master-panel="render"]:not([hidden])');
-  await page.selectOption('#outputFormat', 'mp4');
   await page.locator('#audioEnabled').evaluate((input) => { input.checked = false; input.dispatchEvent(new Event('change', { bubbles: true })); });
   if (!await page.locator('#startBtn').isVisible()) throw new Error('Final render action is not visible in Export workspace');
   await page.click('#startBtn');
