@@ -331,7 +331,7 @@ export class VideoPipeline {
         onChunk: (chunk, metadata) => {
           writeBacklog++;
           const task = writeChain.then(async () => {
-            const writeStartedAt = performance.now();
+            const writeStartedAt = globalThis.performance?.now?.() ?? Date.now();
             try {
               // The elementary stream is the durable recovery copy. Never let a
               // Native MP4 mux failure poison it: disable only the native mux and
@@ -348,7 +348,7 @@ export class VideoPipeline {
                 }
               }
             } finally {
-              const elapsedMs = Math.max(0, performance.now() - writeStartedAt);
+              const elapsedMs = Math.max(0, (globalThis.performance?.now?.() ?? Date.now()) - writeStartedAt);
               maxWriteBacklog = backpressure.observeWrite(elapsedMs);
               const storageState = this.manager.storageGovernor?.observeWrite?.(elapsedMs, Number(chunk?.byteLength || 0));
               if (storageState) maxWriteBacklog = Math.min(maxWriteBacklog, this.manager.storageGovernor.queueCap(renderPlan.writeBacklog));
@@ -455,7 +455,7 @@ export class VideoPipeline {
       let temporalFallbacks = 0;
       let lastProgressUiAt = 0;
       const reportRenderProgress = (payload, force = false) => {
-        const now = typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
+        const now = globalThis.performance?.now?.() ?? Date.now();
         if (!force && now - lastProgressUiAt < 125) return false;
         lastProgressUiAt = now;
         update(payload);
@@ -667,6 +667,9 @@ export class VideoPipeline {
         abortIfNeeded(signal);
         await waitIfPaused();
         const frameSource = sourceFrame.source;
+        let processedFrame = null;
+        let processedFrameOwnedBySequencer = false;
+        try {
         if (resuming && currentSourceIndex < resumeSourceFrameIndex) {
           sourceTimestampOrigin ??= sourceFrame.timestamp;
           currentSourceIndex++;
@@ -694,7 +697,7 @@ export class VideoPipeline {
         }
         if (effectsBackend === 'webgpu') {
           try {
-            gpu.renderFrame(frameSource, activeCleanupEffects, { width: nativeWidth, height: nativeHeight }, { releaseSource: true });
+            gpu.renderFrame(frameSource, activeCleanupEffects, { width: nativeWidth, height: nativeHeight }, { releaseSource: false });
             nativeContext.drawImage(gpuCanvas, 0, 0);
             processedFrame = new VideoFrame(nativeCanvas, {
               timestamp,
@@ -758,6 +761,8 @@ export class VideoPipeline {
         }
         frameIntegrity.observeProcessed();
         await sequencer.push(processedFrame, { timestamp, duration: sourceDuration });
+        processedFrameOwnedBySequencer = true;
+        processedFrame = null;
         for (const item of await sequencer.drainPair(interpolate)) {
           try {
             await emitProcessedFrame(item);
@@ -766,6 +771,12 @@ export class VideoPipeline {
           }
         }
         currentSourceIndex++;
+        } finally {
+          if (!processedFrameOwnedBySequencer) {
+            try { processedFrame?.close?.(); } catch (cleanupError) { console.error('[BARSA][frame-cleanup][processed-failed]', cleanupError); }
+          }
+          try { frameSource?.close?.(); } catch (cleanupError) { console.error('[BARSA][frame-cleanup][source-failed]', cleanupError); }
+        }
       }
       for (const item of await sequencer.flush(interpolate)) {
         try {
