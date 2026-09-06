@@ -7,6 +7,7 @@ const files = {
   html: new URL('../index.html', import.meta.url),
   nihui: new URL('../src/engine/NihuiModelBridge.js', import.meta.url),
   nihuiTest: new URL('../tests/NihuiModelBridge.test.mjs', import.meta.url),
+  rc14Test: new URL('../tests/v10-rc14-professional-hardening.test.mjs', import.meta.url),
   qualityMetrics: new URL('../src/engine/QualityMetricsEngine.js', import.meta.url),
   qualityMetricsTest: new URL('../tests/QualityMetrics.test.mjs', import.meta.url),
 };
@@ -94,6 +95,16 @@ async function cleanupHtml() {
   await writeFile(files.html, source);
 }
 
+async function cleanupObsoleteRegressionCoverage() {
+  let source = await readFile(files.rc14Test, 'utf8');
+  source = removeRegex(
+    source,
+    /\ntest\('RC14 Nihui pack import is size-bounded, sanitized and cleans OPFS if metadata commit fails',[\s\S]*?\n\}\);\n/,
+  );
+  if (/NihuiModelBridge/.test(source)) throw new Error('Obsolete Nihui regression coverage remains after cleanup');
+  await writeFile(files.rc14Test, source);
+}
+
 async function removeIfPresent(file) {
   try {
     await access(file);
@@ -107,6 +118,7 @@ await cleanupManager();
 await cleanupPipeline();
 await cleanupMain();
 await cleanupHtml();
+await cleanupObsoleteRegressionCoverage();
 await Promise.all([
   removeIfPresent(files.nihui),
   removeIfPresent(files.nihuiTest),
