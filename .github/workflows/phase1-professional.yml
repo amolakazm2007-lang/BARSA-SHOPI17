@@ -1,0 +1,31 @@
+name: BARSA Phase 1 Professional Hardening
+
+on:
+  push:
+    branches: [ crashproof-phase1-professional ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Runtime fault contract tests
+        run: node --test tests/RuntimeFaultReporter.test.mjs tests/ResourceScopeOwnership.test.mjs
+      - name: Full unit suite
+        run: npm test
+      - name: Production build
+        run: npm run build
+      - name: Release invariants
+        run: npm run check:release-invariants
+      - name: Security audit
+        run: npm audit --audit-level=high
