@@ -61,6 +61,7 @@ jobs:
             tests/NihuiModelBridge.test.mjs
             src/engine/QualityMetricsEngine.js
             tests/QualityMetrics.test.mjs
+            tests/v10-rc14-professional-hardening.test.mjs
           )
           if git diff --quiet -- "${tracked_paths[@]}"; then
             echo 'Verified refactor already persisted.'
