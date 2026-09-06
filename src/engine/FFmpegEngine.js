@@ -14,9 +14,11 @@ export class FFmpegEngine extends EventTarget {
     this.FFmpegClass = null;
     this.fetchFile = null;
     this.execTimeoutMs = DEFAULT_EXEC_TIMEOUT_MS;
+    this.lastLoadOptions = null;
   }
 
   async load({ multiThread = crossOriginIsolated, onProgress = null, onLog = null } = {}) {
+    this.lastLoadOptions = { multiThread, onProgress, onLog };
     if (this.loaded) return;
     if (this.loading) return this.loading;
     this.loading = (async () => {
@@ -65,7 +67,18 @@ export class FFmpegEngine extends EventTarget {
     return ffmpeg;
   }
 
-  async remux({ video, source, outputFormat = 'mp4', elementaryFormat, fps, audioFilter = null, audioBitrateK = 192, videoCRF = 18, videoPreset = 'fast', signal = null }) {
+  async remux(params) {
+    try {
+      return await this._remuxOnce(params);
+    } catch (error) {
+      if (error?.code !== 'OPERATION_TIMEOUT') throw error;
+      console.warn('[BARSA][FFmpeg][remux-timeout-recreate-retry]', error);
+      await this.load(this.lastLoadOptions || {});
+      return this._remuxOnce(params);
+    }
+  }
+
+  async _remuxOnce({ video, source, outputFormat = 'mp4', elementaryFormat, fps, audioFilter = null, audioBitrateK = 192, videoCRF = 18, videoPreset = 'fast', signal = null }) {
     this._assertLoaded();
     const token = createToken();
     const videoExt = elementaryFormat?.startsWith('ivf') ? 'ivf' : 'h264';
