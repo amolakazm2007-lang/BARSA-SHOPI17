@@ -25,6 +25,18 @@ test('Android shell fail-closes automatic model downloads on cold start', async 
   assert.match(activity, /nativeAi\.releaseSessions\(\)/);
 });
 
+test('stale callbacks cannot evaluate JavaScript on a destroyed WebView', async () => {
+  const activity = await read('android/app/src/main/java/com/barsa/shopi/MainActivity.java');
+  assert.match(activity, /private int webViewGeneration = 0/);
+  assert.match(activity, /private boolean isCurrentWebView\(WebView target, int generation\)/);
+  assert.match(activity, /target == webView && generation == webViewGeneration/);
+  assert.match(activity, /if \(!isCurrentWebView\(target, targetGeneration\)\) return/);
+  assert.match(activity, /WebView stale = webView/);
+  assert.match(activity, /webView = null/);
+  assert.match(activity, /webViewGeneration\+\+/);
+  assert.match(activity, /ViewCompat\.setOnApplyWindowInsetsListener\(stale, null\)/);
+});
+
 test('release CI boots a real Android AVD and proves the bounded app-launch script executed', async () => {
   const workflow = await read('.github/workflows/build-apk.yml');
   const gate = await read('scripts/android-coldstart-gate.sh');
@@ -43,6 +55,9 @@ test('release CI boots a real Android AVD and proves the bounded app-launch scri
   assert.match(gate, /timeout 30s adb shell am start -W/);
   assert.match(gate, /for PASS in 1 2 3/);
   assert.match(gate, /pidof \"\$PACKAGE\"/);
+  assert.match(gate, /topResumedActivity=/);
+  assert.match(gate, /ResumedActivity:/);
+  assert.match(gate, /ADB_OFFLINE_AFTER_START/);
   assert.match(gate, /LOGCAT_CAPTURED/);
   assert.match(gate, /capture_diagnostics/);
   assert.match(gate, /activity exit-info/);
