@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   verify:
@@ -14,13 +14,25 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
       - run: npm ci
-      - name: Runtime fault contract tests
-        run: node --test tests/RuntimeFaultReporter.test.mjs tests/ResourceScopeOwnership.test.mjs
+      - name: Apply deterministic module lazy-loading migration
+        run: |
+          set -euo pipefail
+          node scripts/apply-phase3-lazy-loading.mjs
+          node scripts/apply-phase3-lazy-loading.mjs
+      - name: Runtime fault and lazy-loading contract tests
+        run: |
+          node --test \
+            tests/RuntimeFaultReporter.test.mjs \
+            tests/ResourceScopeOwnership.test.mjs \
+            tests/LazyEngineFacade.test.mjs \
+            tests/ModuleLazyLoadingContract.test.mjs
       - name: Full unit suite
         run: npm test
       - name: Production build
@@ -29,3 +41,18 @@ jobs:
         run: npm run check:release-invariants
       - name: Security audit
         run: npm audit --audit-level=high
+      - name: Persist verified lazy-loading refactor
+        if: github.event_name == 'push'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- src/engine/EngineManager.js src/engine/VideoPipeline.js; then
+            echo 'Lazy-loading refactor already persisted.'
+            exit 0
+          fi
+          git config user.name 'BARSA CI'
+          git config user.email 'actions@users.noreply.github.com'
+          git add src/engine/EngineManager.js src/engine/VideoPipeline.js
+          git commit -m 'Apply verified module lazy-loading refactor'
+          git pull --rebase origin crashproof-phase1-professional
+          git push origin HEAD:crashproof-phase1-professional
