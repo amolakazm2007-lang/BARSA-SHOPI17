@@ -17,3 +17,16 @@ test('P0 WebGL2 shader avoids reserved flat identifier', () => {
   assert.match(webgl, /float flatRegion=/);
   assert.match(webgl, /u_deband\*flatRegion/);
 });
+
+test('P0 VideoPipeline monotonic timing cannot be shadowed by performance engine', () => {
+  assert.doesNotMatch(videoPipeline, /\bperformance\.now\(\)/);
+  assert.match(videoPipeline, /globalThis\.performance\?\.now\?\.\(\) \?\? Date\.now\(\)/);
+});
+
+test('P0 source VideoFrames have explicit finally cleanup and deterministic ownership transfer', () => {
+  assert.match(videoPipeline, /let processedFrameOwnedBySequencer = false;/);
+  assert.match(videoPipeline, /processedFrameOwnedBySequencer = true;\s*processedFrame = null;/);
+  assert.match(videoPipeline, /if \(!processedFrameOwnedBySequencer\)[\s\S]*processedFrame\?\.close\?\.\(\)/);
+  assert.match(videoPipeline, /frameSource\?\.close\?\.\(\)/);
+  assert.match(videoPipeline, /releaseSource: false/);
+});
