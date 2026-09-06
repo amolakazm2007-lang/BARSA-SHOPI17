@@ -39,6 +39,7 @@ jobs:
           node scripts/apply-ffmpeg-remux-recovery.mjs
           node scripts/apply-runtime-fault-ledger.mjs
           node scripts/apply-quality-lock-verification.mjs
+          node scripts/apply-crash-loop-safe-mode.mjs
       - name: Update vulnerable build and browser dependencies safely
         run: npm install --save-dev --save-exact vite@6.4.3 playwright@1.63.0 --package-lock-only
       - name: Persist deterministic integration updates safely
@@ -64,6 +65,7 @@ jobs:
             node scripts/apply-ffmpeg-remux-recovery.mjs
             node scripts/apply-runtime-fault-ledger.mjs
             node scripts/apply-quality-lock-verification.mjs
+            node scripts/apply-crash-loop-safe-mode.mjs
             npm install --save-dev --save-exact vite@6.4.3 playwright@1.63.0 --package-lock-only
 
             if git diff --quiet; then
