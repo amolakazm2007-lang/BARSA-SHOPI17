@@ -68,15 +68,23 @@ test('FFmpeg progress callbacks are throttled in source to protect UI thread', a
   assert.match(source, /now - lastProgressEmit < 100/);
 });
 
-test('validated native MP4 output removes its OPFS scratch file', async () => {
+test('validated native MP4 output remains durably leased until its consumer releases it', async () => {
   const source = await readFile(new URL('../src/engine/VideoPipeline.js', import.meta.url), 'utf8');
-  assert.match(source, /await nativeMp4\?\.releaseOutputFile\?\.\(\)/);
+  assert.match(source, /const nativeOutputLeased = Boolean\(nativeMp4\?\.opfsOutput\)/);
+  assert.match(source, /if \(nativeOutputLeased\) await storage\.completeSessionWithOutput\(jobId\)/);
+  assert.match(source, /const releaseOutputLease = nativeOutputLeased \? async \(\) => \{/);
+  assert.match(source, /await storage\.deleteSession\(jobId\)/);
+  assert.match(source, /release: releaseOutputLease/);
+  assert.doesNotMatch(source, /await nativeMp4\?\.releaseOutputFile\?\.\(\)/);
 });
 
-test('successful exports remove resumable OPFS session artifacts immediately', async () => {
+test('successful exports clean resumable OPFS artifacts without invalidating a native final output', async () => {
   const source = await readFile(new URL('../src/engine/VideoPipeline.js', import.meta.url), 'utf8');
-  const cleanupCalls = source.match(/await storage\.deleteSession\(jobId\)\.catch\(\(\) => \{\}\)/g) || [];
-  assert.ok(cleanupCalls.length >= 2, `expected cleanup in native and FFmpeg completion paths, got ${cleanupCalls.length}`);
+  assert.match(source, /if \(nativeOutputLeased\) await storage\.completeSessionWithOutput\(jobId\)/);
+  assert.match(source, /else await storage\.deleteSession\(jobId\)\.catch\(\(cleanupError\) => console\.error\('\[BARSA\]\[storage\]\[completed-session-cleanup-failed\]'/);
+  assert.match(source, /if \(outputLeaseReleased\) return;/);
+  assert.match(source, /outputLeaseReleased = true;/);
+  assert.match(source, /await storage\.deleteSession\(jobId\);/);
 });
 
 test('MP4 metadata validation removes both event listeners on any terminal outcome', async () => {
