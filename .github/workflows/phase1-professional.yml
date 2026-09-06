@@ -26,13 +26,19 @@ jobs:
           set -euo pipefail
           node scripts/apply-phase3-lazy-loading.mjs
           node scripts/apply-phase3-lazy-loading.mjs
-      - name: Runtime fault and lazy-loading contract tests
+      - name: Apply deterministic dead-weight cleanup
+        run: |
+          set -euo pipefail
+          node scripts/apply-dead-weight-cleanup.mjs
+          node scripts/apply-dead-weight-cleanup.mjs
+      - name: Runtime fault, lazy-loading and cleanup contract tests
         run: |
           node --test \
             tests/RuntimeFaultReporter.test.mjs \
             tests/ResourceScopeOwnership.test.mjs \
             tests/LazyEngineFacade.test.mjs \
-            tests/ModuleLazyLoadingContract.test.mjs
+            tests/ModuleLazyLoadingContract.test.mjs \
+            tests/DeadWeightCleanupContract.test.mjs
       - name: Full unit suite
         run: npm test
       - name: Production build
@@ -41,18 +47,18 @@ jobs:
         run: npm run check:release-invariants
       - name: Security audit
         run: npm audit --audit-level=high
-      - name: Persist verified lazy-loading refactor
+      - name: Persist verified startup and dead-weight refactor
         if: github.event_name == 'push'
         shell: bash
         run: |
           set -euo pipefail
-          if git diff --quiet -- src/engine/EngineManager.js src/engine/VideoPipeline.js; then
-            echo 'Lazy-loading refactor already persisted.'
+          if git diff --quiet -- src/engine/EngineManager.js src/engine/VideoPipeline.js src/main.js index.html src/engine/NihuiModelBridge.js; then
+            echo 'Verified refactor already persisted.'
             exit 0
           fi
           git config user.name 'BARSA CI'
           git config user.email 'actions@users.noreply.github.com'
-          git add src/engine/EngineManager.js src/engine/VideoPipeline.js
-          git commit -m 'Apply verified module lazy-loading refactor'
+          git add -A -- src/engine/EngineManager.js src/engine/VideoPipeline.js src/main.js index.html src/engine/NihuiModelBridge.js
+          git commit -m 'Apply verified startup and dead-weight refactor'
           git pull --rebase origin crashproof-phase1-professional
           git push origin HEAD:crashproof-phase1-professional
