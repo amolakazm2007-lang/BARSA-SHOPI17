@@ -16,6 +16,9 @@ import { RenderLoadGovernor } from './RenderLoadGovernor.js';
 import { AdaptiveBackpressure } from './AdaptiveBackpressure.js';
 import { createQualityLockFingerprint } from './RenderFingerprint.js';
 import { TypedArrayPool } from './TypedArrayPool.js';
+import { ProgressWatchdog } from './CrashProofRuntime.js';
+import { CrashProofFallbackPolicy } from './CrashProofFallbackPolicy.js';
+import { crashProofUserMessage } from './CrashProofUserNotice.js';
 
 export class VideoPipeline {
   constructor(engineManager) {
@@ -59,7 +62,15 @@ export class VideoPipeline {
     let temporalArtifactGuard = null;
     let ffmpegWasUsed = false;
     let nativeMuxFailure = null;
-    const cpuFrameWorker = new CPUFrameWorker();
+    let watchdogError = null;
+    let renderWatchdog = null;
+    const crashFallback = new CrashProofFallbackPolicy();
+    const reportCrashProofFailure = (error, fallback = null) => {
+      console.error('[BARSA][crash-proof]', error);
+      this.manager.dispatchEvent(new CustomEvent('warning', { detail: { code: error?.code || 'RUNTIME_FAILURE', error, message: crashProofUserMessage(error, { fallback }) } }));
+    };
+    crashFallback.addEventListener('fallback', ({ detail }) => reportCrashProofFailure(detail.error, detail.to));
+    const cpuFrameWorker = new CPUFrameWorker({ onFailure: (error) => reportCrashProofFailure(error, 'Canvas2D/main-thread') });
     const stability = new RenderStabilityMonitor();
     const renderGovernor = new RenderLoadGovernor();
     let frameIntegrity = null;
@@ -358,14 +369,14 @@ export class VideoPipeline {
       let effectsBackend = 'canvas2d';
       let webglReady = false;
       if (this.manager.capabilities.webGL2) {
-        try { webgl.init(webglCanvas, { performanceManager: performance }); webglReady = true; } catch {}
+        try { webgl.init(webglCanvas, { performanceManager: performance }); webglReady = true; } catch (error) { reportCrashProofFailure(error, 'Canvas2D'); }
       }
       if (this.manager.capabilities.webGPU) {
         try {
           await gpu.init(gpuCanvas, { performanceManager: performance });
           effectsBackend = 'webgpu';
-          gpu.onFatalLoss = () => { effectsBackend = webglReady ? 'webgl2' : 'canvas2d'; };
-        } catch {}
+          gpu.onFatalLoss = (error) => { const fallback = webglReady ? 'WebGL2' : 'Canvas2D'; effectsBackend = webglReady ? 'webgl2' : 'canvas2d'; reportCrashProofFailure(error, fallback); };
+        } catch (error) { reportCrashProofFailure(error, webglReady ? 'WebGL2' : 'Canvas2D'); }
       }
       if (effectsBackend === 'canvas2d' && webglReady) effectsBackend = 'webgl2';
 
@@ -422,6 +433,18 @@ export class VideoPipeline {
       const keyFrameInterval = Math.max(1, Math.round(targetFps * 2));
       let encodedFrames = resuming ? resumeEncodedFrames : 0;
       const encodedFramesAtResume = encodedFrames;
+      renderWatchdog = new ProgressWatchdog({
+        timeoutMs: Math.max(15_000, Math.round(8_000 + 4 * 1000 / Math.max(1, targetFps))),
+        pollMs: 500,
+        label: 'video render frame pipeline',
+        onStall: async (error) => {
+          watchdogError = error;
+          reportCrashProofFailure(error);
+          cpuFrameWorker.destroy(error);
+          try { gpu.destroy?.(); } catch (cleanupError) { console.error('[BARSA][watchdog][gpu-cleanup-failed]', cleanupError); }
+          try { webgl.destroy?.(); } catch (cleanupError) { console.error('[BARSA][watchdog][webgl-cleanup-failed]', cleanupError); }
+        },
+      }).start(encodedFrames);
       let temporalFrames = 0;
       let temporalSceneResets = 0;
       let colorDiagnostics = { applied: false };
@@ -439,6 +462,7 @@ export class VideoPipeline {
       };
 
       const renderOutput = async ({ frame, timestamp }) => {
+        if (watchdogError) throw watchdogError;
         abortIfNeeded(signal);
         await waitIfPaused();
         nativeContext.clearRect(0, 0, nativeWidth, nativeHeight);
@@ -487,18 +511,21 @@ export class VideoPipeline {
           try {
             gpu.renderFrame(outputCanvas, activeFinishEffects, { width: outputSize.width, height: outputSize.height }, { releaseSource: false });
             outputContext.drawImage(gpuCanvas, 0, 0, outputSize.width, outputSize.height);
-          } catch {
+          } catch (error) {
             resilience?.noteBackendFallback?.();
+            const fallback = webglReady ? 'WebGL2' : 'Canvas2D';
             effectsBackend = webglReady ? 'webgl2' : 'canvas2d';
+            reportCrashProofFailure(error, fallback);
           }
         }
         if (effectsBackend === 'webgl2') {
           try {
             webgl.renderFrame(outputCanvas, activeFinishEffects, { width: outputSize.width, height: outputSize.height });
             outputContext.drawImage(webglCanvas, 0, 0, outputSize.width, outputSize.height);
-          } catch {
+          } catch (error) {
             resilience?.noteBackendFallback?.();
             effectsBackend = 'canvas2d';
+            reportCrashProofFailure(error, 'Canvas2D');
           }
         }
         const cpuColor = cpuColorSettings(settings.colorLab);
@@ -509,7 +536,10 @@ export class VideoPipeline {
             effects: effectsBackend === 'canvas2d' ? activeFinishEffects : null,
             compiledColor,
             signal,
-          }).catch(() => null);
+          }).catch((error) => {
+            reportCrashProofFailure(error, 'Canvas2D/main-thread');
+            return null;
+          });
           if (workerImage) {
             outputContext.putImageData(workerImage, 0, 0);
             colorDiagnostics = compiledColor ? { applied: true, backend: 'worker', precision: 'float32-intermediate', colorSpace: 'BT.709/sRGB SDR', lut: compiledColor.lut ? color.activeLutInfo : null, curves: compiledColor.curvesActive } : { applied: false };
@@ -553,6 +583,7 @@ export class VideoPipeline {
           signal,
         });
         encodedFrames++;
+        renderWatchdog?.progress(encodedFrames);
         performance.recordFrame();
         stability.sample(encodedFrames, codecs.encoder?.encodeQueueSize || 0);
         const resilienceAction = resilience?.evaluate?.({ frameIndex: encodedFrames, codecQueue: codecs.encoder?.encodeQueueSize || 0, writeBacklog, plan: renderPlan });
@@ -668,9 +699,11 @@ export class VideoPipeline {
               timestamp,
               duration: sourceDuration,
             });
-          } catch {
+          } catch (error) {
             resilience?.noteBackendFallback?.();
+            const fallback = webglReady ? 'WebGL2' : 'Canvas2D';
             effectsBackend = webglReady ? 'webgl2' : 'canvas2d';
+            reportCrashProofFailure(error, fallback);
           }
         }
         if (!processedFrame && effectsBackend === 'webgl2') {
@@ -678,9 +711,10 @@ export class VideoPipeline {
             webgl.renderFrame(frameSource, activeCleanupEffects, { width: nativeWidth, height: nativeHeight });
             nativeContext.drawImage(webglCanvas, 0, 0);
             processedFrame = new VideoFrame(nativeCanvas, { timestamp, duration: sourceDuration });
-          } catch {
+          } catch (error) {
             resilience?.noteBackendFallback?.();
             effectsBackend = 'canvas2d';
+            reportCrashProofFailure(error, 'Canvas2D');
           }
         }
         if (!processedFrame) {
@@ -750,7 +784,7 @@ export class VideoPipeline {
       }
 
       update({ progress: 0.84, stage: 'flushing-encoder' });
-      await codecs.flushEncoder();
+      await codecs.flushEncoder({ signal });
       await writeChain;
       if (writeError) throw writeError;
       if (writer.frameIndex !== encodedFrames) {
@@ -897,6 +931,7 @@ export class VideoPipeline {
       webgl.destroy();
       sceneDetector?.destroy();
       temporalArtifactGuard?.destroy();
+      renderWatchdog?.stop();
       temporal.reset();
       temporalReconstruction.destroy?.();
       stabilization.destroy?.();
