@@ -15,9 +15,16 @@ try {
   page.on('requestfailed', (request) => { if (!isOptionalRemoteModel(request.url())) errors.push(`REQUEST FAILED ${request.url()} · ${request.failure()?.errorText || 'unknown'}`); });
   await page.goto('http://127.0.0.1:4173/', { waitUntil: 'networkidle' });
 
+  // Follow the same visible navigation a user must use. Models live inside
+  // the Enhance workspace, so the release gate must prove that workspace is
+  // actually reachable instead of force-clicking a hidden control.
+  await page.click('[data-master-target="enhance"]');
+  await page.waitForSelector('[data-master-panel="enhance"]:not([hidden])');
+  await page.click('#modelsBtn');
+  await page.waitForSelector('#modelsDialog[open]');
+
   // CI must be deterministic: verify the trusted catalog action exists, but do not make
   // a third-party model host a release gate. Download retry + SHA integrity are unit-tested.
-  await page.click('#modelsBtn');
   const catalogAction = await page.locator('[data-install="upscale"]').textContent();
   if (!catalogAction.includes('240 KB')) throw new Error('Trusted mobile model download is not exposed in the UI');
 
@@ -47,11 +54,19 @@ try {
   const after = await page.locator('#outputCanvas').evaluate((canvas) => canvas.toDataURL());
   if (before === after) throw new Error('Advanced filters did not change preview pixels');
 
+  // Source/output geometry controls are in Studio.
+  await page.click('[data-master-target="studio"]');
+  await page.waitForSelector('[data-master-panel="studio"]:not([hidden])');
   await page.selectOption('#resolution', 'original');
   await page.selectOption('#targetFps', 'original');
   await page.selectOption('#quality', 'LOW');
+
+  // Final codec/audio controls and the render action are in Export.
+  await page.click('[data-master-target="render"]');
+  await page.waitForSelector('[data-master-panel="render"]:not([hidden])');
   await page.selectOption('#outputFormat', 'mp4');
   await page.locator('#audioEnabled').evaluate((input) => { input.checked = false; input.dispatchEvent(new Event('change', { bubbles: true })); });
+  if (!await page.locator('#startBtn').isVisible()) throw new Error('Final render action is not visible in Export workspace');
   await page.click('#startBtn');
   try {
     await page.waitForSelector('#resultPanel:not([hidden])', { timeout: 60_000 });
