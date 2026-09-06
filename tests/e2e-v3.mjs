@@ -15,10 +15,6 @@ try {
   page.on('requestfailed', (request) => { if (!isOptionalRemoteModel(request.url())) errors.push(`REQUEST FAILED ${request.url()} · ${request.failure()?.errorText || 'unknown'}`); });
   await page.goto('http://127.0.0.1:4173/', { waitUntil: 'networkidle' });
 
-  // Follow the same visible navigation a user uses. Model management has its
-  // own dedicated integrity tests; this gate checks that the trusted action is
-  // reachable, then leaves the dialog so the render proof stays isolated from
-  // unrelated model-import fixtures.
   await page.click('[data-master-target="enhance"]');
   await page.waitForSelector('[data-master-panel="enhance"]:not([hidden])');
   await page.click('#modelsBtn');
@@ -39,9 +35,6 @@ try {
   await page.click('#compareBtn');
   const before = await page.locator('#outputCanvas').evaluate((canvas) => canvas.toDataURL());
 
-  // Exercise advanced controls exactly through the user-visible Compact Pro UI.
-  // Each specialist button selects the lab; the user then opens that lab's
-  // visible summary before touching the controls inside it.
   const colorAdvanced = page.locator('[data-compact-advanced="color"]').first();
   if (!await colorAdvanced.isVisible()) throw new Error('Advanced Color action is not visible');
   await colorAdvanced.click();
@@ -59,6 +52,10 @@ try {
   if (!await qualityDetails.getAttribute('open')) await qualityDetails.locator('summary').click();
   await page.locator('#ql-temporalDenoise').waitFor({ state: 'visible', timeout: 10_000 });
   await page.locator('#ql-temporalDenoise').fill('0.2');
+  const antiFlickerToggle = page.locator('#ql-antiFlicker-on');
+  if (!await antiFlickerToggle.isChecked()) await antiFlickerToggle.check();
+  await page.locator('#ql-antiFlicker').waitFor({ state: 'visible', timeout: 10_000 });
+  if (!await page.locator('#ql-antiFlicker').isEnabled()) throw new Error('Anti-Flicker control did not enable after its visible stage switch');
   await page.locator('#ql-antiFlicker').fill('0.15');
   await page.waitForTimeout(250);
   const after = await page.locator('#outputCanvas').evaluate((canvas) => canvas.toDataURL());
