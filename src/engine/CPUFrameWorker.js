@@ -6,16 +6,32 @@ import { BarsaError } from './CrashProofRuntime.js';
  * rebuilt on the next request instead of leaving a permanently pending Promise.
  */
 export class CPUFrameWorker {
-  constructor({ timeoutMs = 12000, logger = console, onFailure = null } = {}) {
+  constructor({ timeoutMs = 12000, logger = console, onFailure = null, faultReporter = null } = {}) {
     this.worker = null;
     this.pending = new Map();
     this.sequence = 0;
     this.timeoutMs = Math.max(1000, Number(timeoutMs) || 12000);
     this.logger = logger;
     this.onFailure = onFailure;
+    this.faultReporter = faultReporter;
   }
 
   get supported() { return typeof Worker === 'function' && typeof ImageData === 'function'; }
+
+  setFaultReporter(faultReporter) {
+    this.faultReporter = faultReporter || null;
+    return this;
+  }
+
+  _report(code, error, details = {}) {
+    this.faultReporter?.warning?.(code, {
+      subsystem: 'worker',
+      recoverable: error?.recoverable !== false,
+      error,
+      source: 'CPUFrameWorker',
+      ...details,
+    });
+  }
 
   _ensure() {
     if (this.worker) return this.worker;
@@ -28,7 +44,11 @@ export class CPUFrameWorker {
       this.pending.delete(id);
       entry.cleanup();
       if (ok) entry.resolve(new ImageData(new Uint8ClampedArray(buffer), entry.width, entry.height));
-      else entry.reject(new BarsaError('WORKER_FAILED', error || 'CPU frame worker failed', { recoverable: true }));
+      else {
+        const failure = new BarsaError('WORKER_FAILED', error || 'CPU frame worker failed', { recoverable: true });
+        this._report('WORKER_FAILED', failure, { taskId: id });
+        entry.reject(failure);
+      }
     };
     worker.onerror = (event) => {
       const error = new BarsaError('WORKER_CRASH', event.message || event.error?.message || 'CPU frame worker crashed', { recoverable: true, cause: event.error || null });
@@ -45,19 +65,34 @@ export class CPUFrameWorker {
   _failWorker(error) {
     const worker = this.worker;
     this.worker = null;
-    try { worker?.terminate?.(); } catch (terminateError) { this.logger.error?.('[BARSA][worker-terminate-failed]', terminateError); }
+    try {
+      worker?.terminate?.();
+    } catch (terminateError) {
+      this._report('WORKER_TERMINATE_FAILED', terminateError, { originalCode: error?.code || null });
+      this.logger.error?.('[BARSA][worker-terminate-failed]', terminateError);
+    }
     const pending = [...this.pending.values()];
     this.pending.clear();
     for (const entry of pending) { entry.cleanup(); entry.reject(error); }
+    this._report(error?.code || 'WORKER_FAILED', error, { pendingRejected: pending.length });
     this.logger.error?.('[BARSA][worker-failed]', error);
-    try { this.onFailure?.(error); } catch (callbackError) { this.logger.error?.('[BARSA][worker-failure-callback-failed]', callbackError); }
+    try {
+      this.onFailure?.(error);
+    } catch (callbackError) {
+      this._report('WORKER_FAILURE_CALLBACK_FAILED', callbackError, { originalCode: error?.code || null });
+      this.logger.error?.('[BARSA][worker-failure-callback-failed]', callbackError);
+    }
   }
 
   async process(imageData, { effects = null, compiledColor = null, signal = null, fallback = null, timeoutMs = this.timeoutMs } = {}) {
     if (!(imageData instanceof ImageData)) throw new TypeError('CPUFrameWorker expects ImageData');
     if (signal?.aborted) throw signal.reason || new DOMException('Operation cancelled', 'AbortError');
     const worker = this._ensure();
-    if (!worker) return fallback ? fallback(new BarsaError('WORKER_UNAVAILABLE', 'Worker API unavailable', { recoverable: true })) : null;
+    if (!worker) {
+      const error = new BarsaError('WORKER_UNAVAILABLE', 'Worker API unavailable', { recoverable: true });
+      this._report('WORKER_UNAVAILABLE', error);
+      return fallback ? fallback(error) : null;
+    }
     const id = ++this.sequence;
     const buffer = imageData.data.buffer;
     const request = new Promise((resolve, reject) => {
@@ -90,7 +125,9 @@ export class CPUFrameWorker {
       } catch (error) {
         this.pending.delete(id);
         cleanup();
-        reject(new BarsaError('WORKER_POST_FAILED', `CPU frame worker postMessage failed: ${error?.message || error}`, { recoverable: true, cause: error }));
+        const wrapped = new BarsaError('WORKER_POST_FAILED', `CPU frame worker postMessage failed: ${error?.message || error}`, { recoverable: true, cause: error });
+        this._report('WORKER_POST_FAILED', wrapped, { taskId: id });
+        reject(wrapped);
       }
     });
     try { return await request; }
@@ -104,7 +141,12 @@ export class CPUFrameWorker {
   destroy(reason = new DOMException('Worker destroyed', 'AbortError')) {
     const worker = this.worker;
     this.worker = null;
-    try { worker?.terminate?.(); } catch (error) { this.logger.error?.('[BARSA][worker-terminate-failed]', error); }
+    try {
+      worker?.terminate?.();
+    } catch (error) {
+      this._report('WORKER_TERMINATE_FAILED', error, { during: 'destroy' });
+      this.logger.error?.('[BARSA][worker-terminate-failed]', error);
+    }
     const pending = [...this.pending.values()];
     this.pending.clear();
     for (const entry of pending) { entry.cleanup(); entry.reject(reason); }
