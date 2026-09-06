@@ -39,12 +39,17 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Android SDK 36
+      - name: Install Android SDK and emulator image
         shell: bash
         run: |
           set -euo pipefail
           yes | sdkmanager --licenses >/dev/null || true
-          sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            "emulator" \
+            "system-images;android-34;google_apis;x86_64"
 
       - name: Setup Gradle 8.11.1
         uses: gradle/actions/setup-gradle@v4
@@ -122,78 +127,127 @@ jobs:
           test -e /dev/kvm
           ls -l /dev/kvm
 
-      - name: Real Android cold-start crash and ANR gate
+      - name: Boot emulator and execute real app-launch script
         id: coldstart
-        continue-on-error: true
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 34
-          arch: x86_64
-          target: google_apis
-          profile: pixel_5
-          cores: 2
-          ram-size: 3072M
-          heap-size: 512M
-          disk-size: 4096M
-          emulator-boot-timeout: 600
-          disable-animations: true
-          disable-spellchecker: true
-          force-avd-creation: true
-          emulator-options: -no-snapshot-load -no-snapshot-save -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-metrics -camera-back none -camera-front none
-          script: |
-            set -euo pipefail
-            mkdir -p reports
-            printf 'SCRIPT_ENTERED\n' | tee reports/android-script-entered.txt
-            adb devices -l | tee reports/android-adb-devices.txt
-            adb get-state | tee reports/android-adb-state.txt
-            APK="$(find android/app/build/outputs/apk/debug -name '*.apk' | head -n 1)"
-            test -s "$APK"
-            adb install -r "$APK" | tee reports/android-install.log
-            grep -Eq 'Success|success' reports/android-install.log
-            printf 'APK_INSTALLED\n' | tee reports/android-apk-installed.txt
-            adb logcat -c
-            for PASS in 1 2 3; do
-              adb shell am force-stop com.barsa.shopi || true
-              adb shell am start -W -n com.barsa.shopi/.MainActivity | tee "reports/android-launch-${PASS}.log"
-              sleep 10
-              PID="$(adb shell pidof com.barsa.shopi | tr -d '\r')"
-              if [[ -z "$PID" ]]; then
-                adb logcat -d -v time > reports/android-logcat.txt
-                echo "BARSA process died during cold-start pass $PASS" >&2
-                exit 1
-              fi
-              printf 'LAUNCH_%s_PID=%s\n' "$PASS" "$PID" | tee "reports/android-launch-${PASS}-pid.txt"
-            done
-            adb exec-out screencap -p > reports/android-startup.png || true
-            adb shell uiautomator dump /sdcard/barsa-window.xml >/dev/null 2>&1 || true
-            adb pull /sdcard/barsa-window.xml reports/android-window.xml >/dev/null 2>&1 || true
-            adb logcat -d -v time > reports/android-logcat.txt
-            test -s reports/android-logcat.txt
-            printf 'LOGCAT_CAPTURED\n' | tee reports/android-logcat-captured.txt
-            if grep -E "FATAL EXCEPTION|ANR in com\.barsa\.shopi|am_crash.*com\.barsa\.shopi|Process com\.barsa\.shopi .* has died" reports/android-logcat.txt; then
-              echo "Crash/ANR signature detected in Android cold-start gate" >&2
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p reports
+          export ANDROID_AVD_HOME="$HOME/.android/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+
+          printf 'no\n' | avdmanager create avd \
+            --force \
+            --name barsa_ci \
+            --package "system-images;android-34;google_apis;x86_64" \
+            --device "pixel_5" \
+            > reports/android-avd-create.log 2>&1
+
+          adb kill-server || true
+          adb start-server
+          "$ANDROID_HOME/emulator/emulator" \
+            -avd barsa_ci \
+            -no-window \
+            -no-audio \
+            -no-boot-anim \
+            -no-snapshot-load \
+            -no-snapshot-save \
+            -gpu swiftshader_indirect \
+            -camera-back none \
+            -camera-front none \
+            -memory 3072 \
+            -cores 2 \
+            -no-metrics \
+            > reports/android-emulator.log 2>&1 &
+          EMU_PID=$!
+          cleanup() {
+            adb emu kill >/dev/null 2>&1 || true
+            kill "$EMU_PID" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          BOOTED=0
+          for ATTEMPT in $(seq 1 120); do
+            STATE="$(adb get-state 2>/dev/null || true)"
+            BOOT="$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
+            if [[ "$STATE" == "device" && "$BOOT" == "1" ]]; then
+              BOOTED=1
+              break
+            fi
+            if ! kill -0 "$EMU_PID" 2>/dev/null; then
+              echo 'Emulator process exited before Android boot completed' >&2
+              tail -n 200 reports/android-emulator.log || true
               exit 1
             fi
-            adb shell dumpsys meminfo com.barsa.shopi > reports/android-meminfo.txt || true
-            printf 'PASSED\n' | tee reports/android-coldstart-gate.txt
+            sleep 5
+          done
+          if [[ "$BOOTED" != "1" ]]; then
+            echo 'Android emulator failed to reach sys.boot_completed=1' >&2
+            adb devices -l || true
+            tail -n 200 reports/android-emulator.log || true
+            exit 1
+          fi
+
+          printf 'EMULATOR_BOOTED\n' | tee reports/android-emulator-booted.txt
+          printf 'SCRIPT_ENTERED\n' | tee reports/android-script-entered.txt
+          adb devices -l | tee reports/android-adb-devices.txt
+          adb get-state | tee reports/android-adb-state.txt
+
+          APK="$(find android/app/build/outputs/apk/debug -name '*.apk' | head -n 1)"
+          test -s "$APK"
+          adb install -r "$APK" | tee reports/android-install.log
+          grep -Eq 'Success|success' reports/android-install.log
+          printf 'APK_INSTALLED\n' | tee reports/android-apk-installed.txt
+
+          adb logcat -c
+          for PASS in 1 2 3; do
+            adb shell am force-stop com.barsa.shopi || true
+            adb shell am start -W -n com.barsa.shopi/.MainActivity | tee "reports/android-launch-${PASS}.log"
+            sleep 10
+            PID="$(adb shell pidof com.barsa.shopi | tr -d '\r')"
+            if [[ -z "$PID" ]]; then
+              adb logcat -d -v time > reports/android-logcat.txt
+              echo "BARSA process died during cold-start pass $PASS" >&2
+              exit 1
+            fi
+            printf 'LAUNCH_%s_PID=%s\n' "$PASS" "$PID" | tee "reports/android-launch-${PASS}-pid.txt"
+          done
+
+          adb exec-out screencap -p > reports/android-startup.png || true
+          adb shell uiautomator dump /sdcard/barsa-window.xml >/dev/null 2>&1 || true
+          adb pull /sdcard/barsa-window.xml reports/android-window.xml >/dev/null 2>&1 || true
+          adb logcat -d -v time > reports/android-logcat.txt
+          test -s reports/android-logcat.txt
+          printf 'LOGCAT_CAPTURED\n' | tee reports/android-logcat-captured.txt
+
+          if grep -E "FATAL EXCEPTION|ANR in com\.barsa\.shopi|am_crash.*com\.barsa\.shopi|Process com\.barsa\.shopi .* has died" reports/android-logcat.txt; then
+            echo "Crash/ANR signature detected in Android cold-start gate" >&2
+            exit 1
+          fi
+
+          adb shell dumpsys meminfo com.barsa.shopi > reports/android-meminfo.txt
+          test -s reports/android-meminfo.txt
+          printf 'PASSED\n' | tee reports/android-coldstart-gate.txt
 
       - name: Validate cold-start gate result
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p reports
-          test -f reports/android-script-entered.txt || { echo 'FAIL: emulator never reached SCRIPT_ENTERED' | tee reports/android-coldstart-summary.txt; exit 1; }
-          test -f reports/android-apk-installed.txt || { echo 'FAIL: script started but APK install marker is missing' | tee reports/android-coldstart-summary.txt; exit 1; }
+          test -f reports/android-emulator-booted.txt
+          test -f reports/android-script-entered.txt
+          test -f reports/android-apk-installed.txt
           for PASS in 1 2 3; do
-            test -f "reports/android-launch-${PASS}-pid.txt" || { echo "FAIL: launch $PASS PID marker is missing" | tee reports/android-coldstart-summary.txt; exit 1; }
+            test -f "reports/android-launch-${PASS}-pid.txt"
           done
-          test -f reports/android-logcat-captured.txt || { echo 'FAIL: logcat capture marker is missing' | tee reports/android-coldstart-summary.txt; exit 1; }
-          grep -qx 'PASSED' reports/android-coldstart-gate.txt || { echo 'FAIL: Android cold-start gate did not reach PASSED' | tee reports/android-coldstart-summary.txt; exit 1; }
+          test -f reports/android-logcat-captured.txt
+          test -s reports/android-logcat.txt
+          test -s reports/android-meminfo.txt
+          grep -qx 'PASSED' reports/android-coldstart-gate.txt
           if grep -E "FATAL EXCEPTION|ANR in com\.barsa\.shopi|am_crash.*com\.barsa\.shopi|Process com\.barsa\.shopi .* has died" reports/android-logcat.txt; then
             echo 'FAIL: crash/ANR signature found in captured logcat' | tee reports/android-coldstart-summary.txt
             exit 1
           fi
-          echo 'PASS: SCRIPT_ENTERED -> APK_INSTALLED -> LAUNCH_1/2/3_PID -> LOGCAT_CAPTURED -> PASSED' | tee reports/android-coldstart-summary.txt
+          echo 'PASS: EMULATOR_BOOTED -> SCRIPT_ENTERED -> APK_INSTALLED -> LAUNCH_1/2/3_PID -> LOGCAT_CAPTURED -> PASSED' | tee reports/android-coldstart-summary.txt
 
       - name: Collect sign and verify APKs
         shell: bash
@@ -246,7 +300,7 @@ jobs:
           cp android/app/build/reports/lint-results-release.html final/reports/ 2>/dev/null || true
           git archive --format=zip --output=final/BARSA-SHOPI-v10.0.0-FINAL-source.zip HEAD
           zip -u final/BARSA-SHOPI-v10.0.0-FINAL-source.zip package-lock.json
-          printf 'BARSA SHOPI v10.0.0 FINAL\nInstallable APK: BARSA-SHOPI-v10.0.0-FINAL-installable.apk\nUnsigned release APK: BARSA-SHOPI-v10.0.0-FINAL-release-unsigned.apk\nCold-start Android emulator gate is fail-closed and requires explicit SCRIPT_ENTERED, APK_INSTALLED, 3 live PID markers, LOGCAT_CAPTURED and PASSED markers.\nSigning mode is recorded in reports/signing-mode.txt.\nSource, lint, audit, startup, APK signature and SHA256 reports are included.\n' > final/README-FIRST.txt
+          printf 'BARSA SHOPI v10.0.0 FINAL\nInstallable APK: BARSA-SHOPI-v10.0.0-FINAL-installable.apk\nUnsigned release APK: BARSA-SHOPI-v10.0.0-FINAL-release-unsigned.apk\nAndroid emulator is booted directly by shell; release requires EMULATOR_BOOTED, SCRIPT_ENTERED, APK_INSTALLED, 3 live PID markers, LOGCAT_CAPTURED and PASSED.\nSigning mode is recorded in reports/signing-mode.txt.\nSource, lint, audit, startup, APK signature and SHA256 reports are included.\n' > final/README-FIRST.txt
           rm -f final/release-aligned.apk
 
       - name: Build one downloadable final ZIP
