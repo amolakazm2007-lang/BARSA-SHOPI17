@@ -14,6 +14,8 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
+      - name: Normalize final version metadata
+        run: node scripts/normalize-version-lock.mjs
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
