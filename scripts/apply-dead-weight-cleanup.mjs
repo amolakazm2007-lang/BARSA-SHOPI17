@@ -36,6 +36,7 @@ async function cleanupManager() {
     '      nihui: new NihuiModelBridge(),\n',
     '      qualityMetrics: new QualityMetricsEngine(),\n',
     '    this.engines.nihui.close();\n',
+    '    this.engines.qualityMetrics.destroy();\n',
   ]) source = removeRequired(source, line);
 
   source = replaceRequired(
