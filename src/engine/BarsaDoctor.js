@@ -37,9 +37,9 @@ function pressureRatio(telemetry = {}) {
 }
 
 /**
- * BARSA Doctor: non-destructive diagnostics + explicitly allow-listed repairs.
- * It never deletes a verified model, changes final-render quality settings,
- * or mutates a resumable render session automatically.
+ * BARSA Doctor is a non-destructive diagnostics and verified-repair control plane.
+ * Every failed observation is reported through RuntimeFaultReporter. A failed
+ * diagnostic can never be silently converted into a healthy result.
  */
 export class BarsaDoctor {
   constructor(manager) {
@@ -48,6 +48,28 @@ export class BarsaDoctor {
     this.running = false;
     this.historyKey = 'barsa-doctor-health-history-v2';
     this.repairStateKey = 'barsa-doctor-repair-state-v2';
+  }
+
+  _report(level, code, error = null, details = {}) {
+    const reporter = this.manager?.faultReporter;
+    const payload = {
+      ...details,
+      error: error instanceof Error ? error : error ? new Error(String(error)) : undefined,
+      subsystem: details.subsystem || 'doctor',
+      source: 'BarsaDoctor',
+      recoverable: details.recoverable ?? true,
+    };
+    if (level === 'error') return reporter?.error?.(code, payload) || null;
+    return reporter?.warning?.(code, payload) || null;
+  }
+
+  async _observe(code, fn, fallback = null, details = {}) {
+    try {
+      return await fn();
+    } catch (error) {
+      this._report('warning', code, error, details);
+      return fallback;
+    }
   }
 
   async run(mode = 'quick', { onProgress = null } = {}) {
@@ -67,6 +89,7 @@ export class BarsaDoctor {
         return result;
       } catch (error) {
         checks[id] = { status: 'FAIL', elapsedMs: performance.now() - started, error: safeError(error) };
+        this._report('error', 'DOCTOR_CHECK_FAILED', error, { checkId: id, mode, recoverable: true });
         return null;
       }
     };
@@ -79,8 +102,12 @@ export class BarsaDoctor {
         if (!c.indexedDB) issues.push(issue('idb-unavailable', 'high', 'IndexedDB is unavailable; session metadata cannot be persisted reliably.'));
         if (!c.webGPU) issues.push(issue('webgpu-unavailable', 'medium', 'WebGPU is unavailable; AI will use Native/WASM fallback.'));
         return {
-          webCodecs: !!c.webCodecs, webGPU: !!c.webGPU, opfs: !!c.opfs, indexedDB: !!c.indexedDB,
-          hardwareConcurrency: c.hardwareConcurrency || 1, deviceMemoryGB: c.deviceMemoryGB || null,
+          webCodecs: !!c.webCodecs,
+          webGPU: !!c.webGPU,
+          opfs: !!c.opfs,
+          indexedDB: !!c.indexedDB,
+          hardwareConcurrency: c.hardwareConcurrency || 1,
+          deviceMemoryGB: c.deviceMemoryGB || null,
           profile: c.deviceProfile?.label || c.deviceProfile?.id || null,
         };
       });
@@ -91,13 +118,24 @@ export class BarsaDoctor {
         const ratio = estimate?.quotaBytes ? Number(estimate.usageBytes || 0) / Number(estimate.quotaBytes) : 0;
         if (ratio >= 0.92) issues.push(issue('storage-critical', 'high', `Storage is ${Math.round(ratio * 100)}% full.`, 'storage-safe-clean'));
         else if (ratio >= 0.80) issues.push(issue('storage-high', 'medium', `Storage is ${Math.round(ratio * 100)}% full.`, 'storage-safe-clean'));
-        const resumable = await storage.findResumableSession().catch(() => null);
-        return { ...estimate, usageRatio: ratio, resumable: resumable ? { sessionId: resumable.sessionId, status: resumable.status, progress: resumable.progress } : null };
+        const resumable = await this._observe(
+          'DOCTOR_RESUME_DISCOVERY_FAILED',
+          () => storage.findResumableSession(),
+          null,
+          { subsystem: 'storage' },
+        );
+        return {
+          ...estimate,
+          usageRatio: ratio,
+          resumable: resumable ? { sessionId: resumable.sessionId, status: resumable.status, progress: resumable.progress } : null,
+        };
       });
 
       await capture('performance', async () => {
         const perf = this.manager.engines.performance;
-        if (typeof perf.sample === 'function') await perf.sample().catch(() => {});
+        if (typeof perf.sample === 'function') {
+          await this._observe('DOCTOR_PERFORMANCE_SAMPLE_FAILED', () => perf.sample(), null, { subsystem: 'resources' });
+        }
         const telemetry = { ...(perf.telemetry || {}) };
         const pressure = String(telemetry.pressureState || perf._pressureState || 'normal');
         if (pressure === 'critical') issues.push(issue('memory-pressure-critical', 'high', 'Memory/GPU pressure is critical; close background apps before a long render.', 'release-ai-memory'));
@@ -109,7 +147,12 @@ export class BarsaDoctor {
 
       if (mode !== 'quick') {
         await capture('resume-integrity', async () => {
-          const session = await this.manager.engines.storage.findResumableSession().catch(() => null);
+          const session = await this._observe(
+            'DOCTOR_RESUME_INTEGRITY_READ_FAILED',
+            () => this.manager.engines.storage.findResumableSession(),
+            null,
+            { subsystem: 'storage' },
+          );
           if (!session) return { found: false };
           if (session.status !== 'remux_pending' && session.durableResume !== true) {
             issues.push(issue('resume-legacy', 'medium', 'A resumable session exists but does not have a modern durable checkpoint.'));
@@ -145,8 +188,13 @@ export class BarsaDoctor {
       const severe = issues.filter(v => v.severity === 'high').length;
       const verdict = failCount || severe ? 'ATTENTION' : issues.length ? 'GOOD_WITH_NOTES' : 'HEALTHY';
       const report = {
-        version: 2, mode, testedAt: nowIso(), elapsedMs: performance.now() - startedAt,
-        verdict, checks, issues,
+        version: 2,
+        mode,
+        testedAt: nowIso(),
+        elapsedMs: performance.now() - startedAt,
+        verdict,
+        checks,
+        issues,
         healthScore: healthScore(checks, issues),
         componentHealth: componentScores(checks, issues),
         devicePassport: this.manager.performancePassport?.snapshot?.() || null,
@@ -169,8 +217,21 @@ export class BarsaDoctor {
       if (!engine) continue;
       for (const [modelId, config] of Object.entries(registry || {})) {
         onProgress?.(`model:${modelId}`);
-        const status = await this.manager.engines.models.getDetailedStatus(modelId, config).catch(error => ({ state: 'error', lastError: safeError(error) }));
-        const row = { modelId, engine: engineKey, installed: !!status.installed, verified: !!status.verified, testPassed: !!status.testPassed, state: status.state || null, provider: status.executionProvider || null };
+        const status = await this._observe(
+          'DOCTOR_MODEL_STATUS_FAILED',
+          () => this.manager.engines.models.getDetailedStatus(modelId, config),
+          { state: 'error', lastError: 'Model status lookup failed' },
+          { subsystem: 'ai', modelId, engineKey },
+        );
+        const row = {
+          modelId,
+          engine: engineKey,
+          installed: !!status.installed,
+          verified: !!status.verified,
+          testPassed: !!status.testPassed,
+          state: status.state || null,
+          provider: status.executionProvider || null,
+        };
         if (status.installed && !status.verified) issues.push(issue(`model-unverified:${modelId}`, 'medium', `${modelId}: installed but SHA/size verification is not valid.`, `reverify-model:${engineKey}:${modelId}`));
         if (status.verified && !status.testPassed) issues.push(issue(`model-untested:${modelId}`, 'medium', `${modelId}: file verified but inference self-test has not passed.`, `retest-model:${engineKey}:${modelId}`));
         if (status.state === 'error') issues.push(issue(`model-error:${modelId}`, 'medium', `${modelId}: ${status.lastError || 'model error'}`, `reverify-model:${engineKey}:${modelId}`));
@@ -182,6 +243,7 @@ export class BarsaDoctor {
           } catch (error) {
             row.liveSelfTest = 'FAIL';
             row.selfTestError = safeError(error);
+            this._report('error', 'DOCTOR_MODEL_SELF_TEST_FAILED', error, { subsystem: 'ai', modelId, engineKey });
             issues.push(issue(`model-runtime:${modelId}`, 'high', `${modelId}: live inference failed: ${safeError(error)}`, `reverify-model:${engineKey}:${modelId}`));
           }
         }
@@ -236,10 +298,17 @@ export class BarsaDoctor {
       } catch (error) {
         this._recordRepairAttempt(action, false);
         this.manager.performancePassport?.noteFailure?.('doctor-repair', action);
+        this._report('error', 'DOCTOR_REPAIR_FAILED', error, { action, recoverable: true });
         repairs.push({ action, status: 'FAILED', verified: false, error: safeError(error) });
       }
     }
-    return { repairedAt: nowIso(), repairs, fixed: repairs.filter(v => v.status === 'FIXED').length, failed: repairs.filter(v => v.status === 'FAILED').length, quarantined: repairs.filter(v => v.status === 'QUARANTINED').length };
+    return {
+      repairedAt: nowIso(),
+      repairs,
+      fixed: repairs.filter(v => v.status === 'FIXED').length,
+      failed: repairs.filter(v => v.status === 'FAILED').length,
+      quarantined: repairs.filter(v => v.status === 'QUARANTINED').length,
+    };
   }
 
   _persistReport(report) {
@@ -248,7 +317,11 @@ export class BarsaDoctor {
       const history = JSON.parse(globalThis.localStorage?.getItem?.(this.historyKey) || '[]');
       history.push({ testedAt: report.testedAt, mode: report.mode, verdict: report.verdict, healthScore: report.healthScore, componentHealth: report.componentHealth });
       globalThis.localStorage?.setItem?.(this.historyKey, JSON.stringify(history.slice(-30)));
-    } catch {}
+      return true;
+    } catch (error) {
+      this._report('warning', 'DOCTOR_REPORT_PERSIST_FAILED', error, { recoverable: true });
+      return false;
+    }
   }
 
   _repairGate(action) {
@@ -259,30 +332,48 @@ export class BarsaDoctor {
       const recentFailures = (row.failures || []).filter(ts => Date.now() - ts < 60 * 60 * 1000);
       if (recentFailures.length >= 3) return { allowed: false, reason: 'Repair quarantined after 3 failed verified attempts within one hour' };
       if (row.lastSuccess && Date.now() - row.lastSuccess < 15_000) return { allowed: false, reason: 'Repair cooldown active; avoiding a repair loop' };
-    } catch {}
-    return { allowed: true };
+      return { allowed: true };
+    } catch (error) {
+      this._report('warning', 'DOCTOR_REPAIR_GATE_STATE_FAILED', error, { action, recoverable: true });
+      return { allowed: true, degradedEvidence: true };
+    }
   }
 
   _recordRepairAttempt(action, success) {
     try {
       const state = JSON.parse(globalThis.localStorage?.getItem?.(this.repairStateKey) || '{}');
       const row = state[action] ||= { failures: [], lastSuccess: 0 };
-      if (success) { row.lastSuccess = Date.now(); row.failures = []; }
-      else row.failures = [...(row.failures || []).filter(ts => Date.now() - ts < 60 * 60 * 1000), Date.now()].slice(-6);
+      if (success) {
+        row.lastSuccess = Date.now();
+        row.failures = [];
+      } else {
+        row.failures = [...(row.failures || []).filter(ts => Date.now() - ts < 60 * 60 * 1000), Date.now()].slice(-6);
+      }
       globalThis.localStorage?.setItem?.(this.repairStateKey, JSON.stringify(state));
-    } catch {}
+      return true;
+    } catch (error) {
+      this._report('warning', 'DOCTOR_REPAIR_STATE_PERSIST_FAILED', error, { action, success, recoverable: true });
+      return false;
+    }
   }
 
   async _verifyRepair(action) {
     if (action === 'storage-safe-clean') {
-      const usage = await this.manager.engines.storage.getStorageUsage().catch(() => null);
+      const usage = await this._observe(
+        'DOCTOR_STORAGE_VERIFY_FAILED',
+        () => this.manager.engines.storage.getStorageUsage(),
+        null,
+        { subsystem: 'storage', action },
+      );
       return !!usage && Number(usage.usageBytes || 0) <= Number(usage.quotaBytes || Infinity);
     }
     if (action === 'release-ai-memory') {
       const perf = this.manager.engines.performance;
       const deadline = performance.now() + 4000;
       while (performance.now() < deadline) {
-        await perf.sample?.().catch(() => {});
+        if (typeof perf.sample === 'function') {
+          await this._observe('DOCTOR_MEMORY_VERIFY_SAMPLE_FAILED', () => perf.sample(), null, { subsystem: 'resources', action });
+        }
         const telemetry = perf.telemetry || {};
         const pressure = String(telemetry.pressureState || perf._pressureState || 'normal');
         const ratio = pressureRatio(telemetry);
@@ -294,7 +385,12 @@ export class BarsaDoctor {
     if (action.startsWith('reverify-model:') || action.startsWith('retest-model:')) {
       const [, , modelId] = action.split(':');
       const config = this._modelConfig(modelId);
-      const status = await this.manager.engines.models.getDetailedStatus(modelId, config).catch(() => null);
+      const status = await this._observe(
+        'DOCTOR_MODEL_VERIFY_STATUS_FAILED',
+        () => this.manager.engines.models.getDetailedStatus(modelId, config),
+        null,
+        { subsystem: 'ai', action, modelId },
+      );
       return !!status?.installed && !!status?.verified && !!status?.testPassed;
     }
     return false;
