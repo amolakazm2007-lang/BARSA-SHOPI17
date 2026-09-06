@@ -26,6 +26,9 @@ test('concurrent first calls share exactly one module/engine load', async () => 
   });
   const a = facade.ping('a');
   const b = facade.ping('b');
+  // The loader intentionally starts in a microtask. Yield once so this test
+  // observes the actual asynchronous contract rather than assuming eager load.
+  await Promise.resolve();
   assert.equal(loads, 1);
   release();
   assert.deepEqual(await Promise.all([a, b]), ['a', 'b']);
