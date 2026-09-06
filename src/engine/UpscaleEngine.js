@@ -5,6 +5,7 @@ import { createOrtSessionWithFallback } from './OrtSessionLoader.js';
 import { WebGpuIoArena } from './WebGpuIoArena.js';
 import { WebGpuTileCompositor } from './WebGpuTileCompositor.js';
 import { withHardTimeout } from './CrashProofRuntime.js';
+import { runOrtInferenceWithRecovery } from './OrtInferenceRecovery.js';
 
 // UpscaleEngine — real ONNX Runtime Web integration for AI upscaling
 // (Real-ESRGAN / Real-CUGAN style models), with Tile Processing + Overlap
@@ -206,6 +207,17 @@ export class UpscaleEngine {
     return null;
   }
 
+  async _invalidateSession(modelId, session = null) {
+    const current = this.session;
+    if (session && current && current !== session) {
+      try { session.release?.(); } catch (error) { console.warn('[BARSA][Upscale][stale-session-release-failed]', { modelId, error }); }
+      return;
+    }
+    try { current?.release?.(); } catch (error) { console.warn('[BARSA][Upscale][session-release-failed]', { modelId, error }); }
+    this.session = null;
+    this.sessionModelId = null;
+  }
+
   async _loadSession(modelId) {
     if (this.session && this.sessionModelId === modelId) return this.session;
     if (this.session) {
@@ -383,8 +395,19 @@ export class UpscaleEngine {
       }
 
       if (!output) {
-        const tensor = new this.ort.Tensor('float32', prepared, inputDims);
-        const outputs = await withHardTimeout(() => session.run({ [inputName]: tensor }), { timeoutMs: 30000, label: `Upscale ORT inference ${modelId}`, signal, onTimeout: () => { this.session?.release?.(); this.session = null; this.sessionModelId = null; } });
+        const outputs = await runOrtInferenceWithRecovery({
+          modelId,
+          getSession: (id) => this._loadSession(id),
+          invalidateSession: (id, stuck) => this._invalidateSession(id, stuck),
+          run: (activeSession) => {
+            const activeInputName = activeSession.inputNames[0];
+            const tensor = new this.ort.Tensor('float32', prepared, inputDims);
+            return activeSession.run({ [activeInputName]: tensor });
+          },
+          timeoutMs: 30000,
+          label: `Upscale ORT inference ${modelId}`,
+          signal,
+        });
         output = outputs[outputName];
         this.lastExecutionProvider = this.executionProvider;
       }

@@ -2,6 +2,7 @@ import { imageDataToChwFloat32, chwFloat32ToImageData } from './UpscaleEngine.js
 import { NativeAiClient } from '../platform/NativeAiClient.js';
 import { createOrtSessionWithFallback } from './OrtSessionLoader.js';
 import { withHardTimeout } from './CrashProofRuntime.js';
+import { runOrtInferenceWithRecovery } from './OrtInferenceRecovery.js';
 
 export const FACE_MODEL_REGISTRY = {
   'gfpgan-1.4': {
@@ -85,6 +86,16 @@ export class FaceRestorationEngine {
       this.ort.env.wasm.wasmPaths = new URL('./vendor/ort-wasm/', document.baseURI).href;
     }
     return this.ort;
+  }
+
+  async _invalidateSession(modelId, session = null) {
+    const current = this.sessions.get(modelId);
+    if (session && current && current !== session) {
+      try { session.release?.(); } catch (error) { console.warn('[BARSA][Face][stale-session-release-failed]', { modelId, error }); }
+      return;
+    }
+    try { current?.release?.(); } catch (error) { console.warn('[BARSA][Face][session-release-failed]', { modelId, error }); }
+    this.sessions.delete(modelId);
   }
 
   async _loadSession(modelId) {
@@ -234,7 +245,19 @@ export class FaceRestorationEngine {
         }
       }
       if (!restoredData) {
-        const output = await withHardTimeout(() => session.run(buildFaceFeeds(session, this.ort, signature, chw, strength)), { timeoutMs: 30000, label: `Face ORT inference ${modelId}`, signal, onTimeout: () => { session?.release?.(); this.sessions.delete(modelId); } });
+        const output = await runOrtInferenceWithRecovery({
+          modelId,
+          getSession: (id) => this._loadSession(id),
+          invalidateSession: (id, stuck) => this._invalidateSession(id, stuck),
+          run: (activeSession) => {
+            session = activeSession;
+            signature = resolveFaceSignature(activeSession, config);
+            return activeSession.run(buildFaceFeeds(activeSession, this.ort, signature, chw, strength));
+          },
+          timeoutMs: 30000,
+          label: `Face ORT inference ${modelId}`,
+          signal,
+        });
         const imageOutput = selectImageOutput(session, output, 3 * size * size);
         if (!imageOutput?.data) throw new Error('Face model did not return a compatible RGB image tensor');
         restoredData = imageOutput.data;

@@ -4,6 +4,7 @@ import { TypedArrayPool } from './TypedArrayPool.js';
 import { createOrtSessionWithFallback } from './OrtSessionLoader.js';
 import { WebGpuIoArena } from './WebGpuIoArena.js';
 import { withHardTimeout, BarsaError } from './CrashProofRuntime.js';
+import { runOrtInferenceWithRecovery } from './OrtInferenceRecovery.js';
 //
 // RIFE exports use several input signatures. Two conventions are
 // common across RIFE ONNX exports found in the wild:
@@ -154,6 +155,18 @@ export class RIFEEngine {
     return null;
   }
 
+  async _invalidateSession(modelId, session = null) {
+    const current = this.session;
+    if (session && current && current !== session) {
+      try { session.release?.(); } catch (error) { console.warn('[BARSA][RIFE][stale-session-release-failed]', { modelId, error }); }
+      return;
+    }
+    try { current?.release?.(); } catch (error) { console.warn('[BARSA][RIFE][session-release-failed]', { modelId, error }); }
+    this.session = null;
+    this.sessionModelId = null;
+    this.signature = null;
+  }
+
   async _loadSession(modelId) {
     if (this.session && this.sessionModelId === modelId) return this.session;
     if (this.session) {
@@ -262,8 +275,8 @@ export class RIFEEngine {
         this.nativeAi.disableModel(modelId);
       }
     }
-    const session = await this._loadSession(modelId);
-    const signature = this.signature || inspectRifeSignature(session);
+    let session = await this._loadSession(modelId);
+    let signature = this.signature || inspectRifeSignature(session);
     assertDynamicOrMatchingSize(signature, width, height);
     const concatLease = signature.convention === 'concat' ? this.tensorPool.acquire(Float32Array, 6 * width * height) : null;
     try {
@@ -293,8 +306,20 @@ export class RIFEEngine {
         }
       }
 
-      const feeds = buildRifeFeeds(session, this.ort, signature, frame0Chw, frame1Chw, width, height, timestep, concatLease);
-      const outputs = await withHardTimeout(() => session.run(feeds), { timeoutMs: 30000, label: `RIFE ORT inference ${modelId}`, onTimeout: () => { this.session?.release?.(); this.session=null; this.sessionModelId=null; this.signature=null; } });
+      const outputs = await runOrtInferenceWithRecovery({
+        modelId,
+        getSession: (id) => this._loadSession(id),
+        invalidateSession: (id, stuck) => this._invalidateSession(id, stuck),
+        run: (activeSession) => {
+          session = activeSession;
+          signature = this.signature || inspectRifeSignature(activeSession);
+          assertDynamicOrMatchingSize(signature, width, height);
+          const feeds = buildRifeFeeds(activeSession, this.ort, signature, frame0Chw, frame1Chw, width, height, timestep, concatLease);
+          return activeSession.run(feeds);
+        },
+        timeoutMs: 30000,
+        label: `RIFE ORT inference ${modelId}`,
+      });
       const output = selectRifeOutput(session, outputs, 3 * width * height);
       if (!output) throw new Error(`RIFE returned no RGB frame matching ${width}x${height}`);
       this.lastExecutionProvider = this.executionProvider;
