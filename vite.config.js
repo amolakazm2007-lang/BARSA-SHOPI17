@@ -4,7 +4,10 @@ export default defineConfig({
   base: './',
   build: {
     target: 'es2022',
-    sourcemap: true,
+    // Production Android packages do not need source maps. Keeping them out of
+    // dist avoids shipping diagnostic source payloads in every APK while
+    // leaving runtime code, models and output quality completely unchanged.
+    sourcemap: false,
     assetsInlineLimit: 0,
     chunkSizeWarningLimit: 900,
     rollupOptions: {
