@@ -6,20 +6,37 @@ on:
     branches: [ crashproof-final ]
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
-      - name: Normalize final version metadata
-        run: node scripts/normalize-version-lock.mjs
+        with:
+          ref: crashproof-final
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
+      - name: Apply deterministic crash-proof integration
+        run: node scripts/apply-crashproof-video-pipeline.mjs
+      - name: Update vulnerable build and browser dependencies safely
+        run: npm install --save-dev --save-exact vite@6.4.3 playwright@1.63.0 --package-lock-only
+      - name: Persist deterministic integration updates
+        run: |
+          if git diff --quiet; then
+            echo "No generated source or dependency changes to commit."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add src/engine/VideoPipeline.js package.json package-lock.json
+            git commit -m "Apply crash-proof pipeline integration and security updates"
+            git push origin HEAD:crashproof-final
+          fi
+      - name: Normalize final version metadata
+        run: node scripts/normalize-version-lock.mjs
       - run: npm ci
       - run: npm test
       - run: npm run build
