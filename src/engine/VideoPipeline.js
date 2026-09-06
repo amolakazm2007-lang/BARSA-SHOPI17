@@ -861,24 +861,27 @@ export class VideoPipeline {
         trackValidation = validateMP4Tracks(outputMetadata, { width: outputSize.width, height: outputSize.height, expectAudio: wantsAudio });
         avSyncValidation = validateAVSync({ expectedVideoDuration: duration, outputDuration: outputMetadata.duration, nativeAudioStats, expectAudio: wantsAudio });
       }
-      // Native MP4 uses OPFS only as a bounded streaming scratch target. After
-      // the Blob has passed validation, remove the scratch entry so repeated
-      // renders do not silently consume storage. Blob/File snapshots remain
-      // readable after their OPFS directory entry is removed.
-      await nativeMp4?.releaseOutputFile?.();
-      // A successfully validated export no longer needs crash-resume artifacts.
-      // Remove the cached source, elementary stream, scratch output and
-      // checkpoint immediately; interrupted jobs remain untouched and resumable.
-      await storage.deleteSession(jobId).catch(() => {});
-      // Do not duplicate the completed export into the frame cache. The returned
-      // Blob/OPFS-backed native output is already the deliverable, while resume
-      // durability is provided by the elementary stream + checkpoints. A second
-      // full-size copy only burns storage bandwidth and quota at 4K/long renders.
+      // OPFS-backed File/Blob objects are not portable snapshots in Chromium: deleting
+      // their directory entry can invalidate a blob: URL that has not finished opening.
+      // Keep exactly one durable final MP4 leased to the consumer, while removing
+      // resume/source/frame artifacts immediately. No second 4K copy is created.
+      const nativeOutputLeased = Boolean(nativeMp4?.opfsOutput);
+      if (nativeOutputLeased) await storage.completeSessionWithOutput(jobId);
+      else await storage.deleteSession(jobId).catch((cleanupError) => console.error('[BARSA][storage][completed-session-cleanup-failed]', { jobId, cleanupError }));
+      let outputLeaseReleased = false;
+      const releaseOutputLease = nativeOutputLeased ? async () => {
+        if (outputLeaseReleased) return;
+        outputLeaseReleased = true;
+        await storage.deleteSession(jobId);
+      } : null;
+      // The final file itself stays durable only while the result is owned by the UI.
+      // Crash/restart cleanup is covered by terminal-session pruning.
       update({ progress: 1, stage: 'completed', detail: formatBytes(outputBlob.size) });
       return {
         blob: outputBlob,
         url: URL.createObjectURL(outputBlob),
         fileName: `video-toolkit-pro-${jobId.slice(0, 8)}.${settings.outputFormat || 'mp4'}`,
+        release: releaseOutputLease,
         metadata: {
           sessionId: jobId,
           width: outputSize.width,

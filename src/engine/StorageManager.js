@@ -476,6 +476,32 @@ export class StorageManager {
     return (await root.getFileHandle(checkpoint.fileName, { create: false })).getFile();
   }
 
+  /**
+   * Commits a validated native output without duplicating it into RAM. Resume-only
+   * artifacts are removed immediately, while the final OPFS MP4 remains leased to
+   * the UI until the result is replaced/cleared. The completed checkpoint lets
+   * startup pruning recover an orphaned lease after a renderer/process death.
+   */
+  async completeSessionWithOutput(sessionId) {
+    await this._drainSessionMutations(sessionId);
+    const checkpoint = await this.getCheckpoint(sessionId);
+    if (!checkpoint?.outputFileName) throw new Error(`No validated output lease found for session "${sessionId}"`);
+    const root = await this._getRoot();
+    if (checkpoint.fileName) await root.removeEntry(checkpoint.fileName).catch(() => {});
+    if (checkpoint.sourceFileName) await root.removeEntry(checkpoint.sourceFileName).catch(() => {});
+    await this.deleteFrameCache(sessionId);
+    return this._mutateCheckpoint(sessionId, (current) => ({
+      ...current,
+      status: 'completed',
+      stage: 'completed',
+      progress: 1,
+      fileName: null,
+      sourceFileName: null,
+      completedAt: Date.now(),
+      updatedAt: Date.now(),
+    }));
+  }
+
   /** Cleans up an OPFS file + its checkpoint record — call after a successful download/export. */
   async deleteSession(sessionId) {
     // Let any already-scheduled checkpoint mutation settle before deleting
@@ -489,10 +515,12 @@ export class StorageManager {
     }
     const checkpoint = await this.getCheckpoint(sessionId);
     if (checkpoint) {
-      try {
-        const root = await this._getRoot();
-        await root.removeEntry(checkpoint.fileName);
-      } catch { /* already gone — fine */ }
+      if (checkpoint.fileName) {
+        try {
+          const root = await this._getRoot();
+          await root.removeEntry(checkpoint.fileName);
+        } catch { /* already gone — fine */ }
+      }
       if (checkpoint.sourceFileName) {
         try {
           const root = await this._getRoot();

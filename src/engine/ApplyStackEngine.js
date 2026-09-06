@@ -98,7 +98,11 @@ export class ApplyStackEngine extends EventTarget {
         cacheKey = cached?.name || null;
         if (cacheKey && this.storage.readStageCache) {
           const diskFile = await this.storage.readStageCache(cacheKey).catch(() => null);
-          if (diskFile?.size) nextFile = diskFile;
+          if (diskFile?.size) {
+            nextFile = diskFile;
+            await result.release?.();
+            result.release = null;
+          }
         }
       }
 
