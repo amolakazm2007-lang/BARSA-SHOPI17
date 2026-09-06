@@ -1,0 +1,25 @@
+name: Crash-Proof Verification
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ crashproof-final ]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: npm run check:release-invariants
+      - run: npm audit --audit-level=high
