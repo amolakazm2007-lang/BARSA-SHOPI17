@@ -57,12 +57,28 @@ try {
   await page.locator('#ql-antiFlicker').waitFor({ state: 'visible', timeout: 10_000 });
   if (!await page.locator('#ql-antiFlicker').isEnabled()) throw new Error('Anti-Flicker control did not enable after its visible stage switch');
   await page.locator('#ql-antiFlicker').fill('0.15');
-  await page.waitForTimeout(250);
-  const after = await page.locator('#outputCanvas').evaluate((canvas) => canvas.toDataURL());
-  if (before === after) throw new Error('Advanced filters did not change preview pixels');
 
-  // Output container belongs to the Studio pane. Validate it while the user can
-  // actually see that control, then move to the Export pane to start rendering.
+  // Preview refresh is deliberately debounced and then committed on RAF. Wait
+  // for the real pixel result rather than assuming a fixed CI timing budget.
+  try {
+    await page.waitForFunction((previous) => {
+      const canvas = document.querySelector('#outputCanvas');
+      return canvas && canvas.toDataURL() !== previous;
+    }, before, { timeout: 5_000, polling: 50 });
+  } catch (error) {
+    const state = await page.evaluate(() => ({
+      exposure: document.querySelector('#cl-exposure')?.value,
+      dehaze: document.querySelector('#cl-dehaze')?.value,
+      highlights: document.querySelector('#cl-highlights')?.value,
+      temporalDenoise: document.querySelector('#ql-temporalDenoise')?.value,
+      antiFlicker: document.querySelector('#ql-antiFlicker')?.value,
+      antiFlickerEnabled: !document.querySelector('#ql-antiFlicker')?.disabled,
+      compareActive: document.querySelector('#compareBtn')?.classList.contains('active'),
+      backend: document.querySelector('#previewBackendBadge')?.textContent,
+    }));
+    throw new Error(`Advanced preview did not commit changed pixels: ${JSON.stringify(state)}`, { cause: error });
+  }
+
   await page.click('[data-master-target="studio"]');
   await page.waitForSelector('[data-master-panel="studio"]:not([hidden])');
   await page.selectOption('#resolution', 'original');
