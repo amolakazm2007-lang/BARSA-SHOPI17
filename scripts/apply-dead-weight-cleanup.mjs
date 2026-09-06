@@ -35,6 +35,7 @@ async function cleanupManager() {
     "import { FullDeviceTestEngine } from './FullDeviceTestEngine.js';\n",
     '      nihui: new NihuiModelBridge(),\n',
     '      qualityMetrics: new QualityMetricsEngine(),\n',
+    '    this.engines.nihui.close();\n',
   ]) source = removeRequired(source, line);
 
   source = replaceRequired(
