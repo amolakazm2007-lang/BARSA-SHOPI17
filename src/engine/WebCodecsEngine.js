@@ -4,6 +4,7 @@ import { PeriodicResumeVerifier } from './PeriodicResumeVerifier.js';
 const DEFAULT_MAX_QUEUE = 4;
 const SUPPORT_TIMEOUT_MS = 5000;
 const FLUSH_TIMEOUT_MS = 15000;
+const QUEUE_STALL_TIMEOUT_MS = 15000;
 
 export class WebCodecsEngine extends EventTarget {
   constructor({ maxQueueSize = DEFAULT_MAX_QUEUE } = {}) {
@@ -55,7 +56,10 @@ export class WebCodecsEngine extends EventTarget {
     try {
       for await (const chunk of chunks) {
         abortIfNeeded(signal);
-        while (this.decoder.decodeQueueSize >= this.maxQueueSize) await waitForQueue(this.decoder, signal);
+        await waitForQueueBelow(this.decoder, this.maxQueueSize, signal, {
+          label: 'VideoDecoder queue drain',
+          onTimeout: () => safeCloseCodec(this, 'decoder'),
+        });
         this.decoder.decode(chunk);
       }
       await withHardTimeout(() => this.decoder.flush(), {
@@ -96,7 +100,10 @@ export class WebCodecsEngine extends EventTarget {
     if (!this.encoder || this.encoder.state !== 'configured') throw new BarsaError('ENCODER_NOT_CONFIGURED', 'Encoder is not configured', { recoverable: true });
     abortIfNeeded(signal);
     try {
-      while (this.encoder.encodeQueueSize >= this.maxQueueSize) await waitForQueue(this.encoder, signal);
+      await waitForQueueBelow(this.encoder, this.maxQueueSize, signal, {
+        label: 'VideoEncoder queue drain',
+        onTimeout: () => safeCloseCodec(this, 'encoder'),
+      });
       this.encoder.encode(frame, { keyFrame });
     } catch (error) {
       throw wrapCodecError('ENCODER_FAILED', 'Video encode operation failed', error);
@@ -360,6 +367,28 @@ function assertWebCodecs(name) { if (!(name in globalThis)) throw new BarsaError
 function abortIfNeeded(signal) { if (signal?.aborted) throw signal.reason || new DOMException('Operation cancelled', 'AbortError'); }
 function safeCloseCodec(owner, key) { try { owner[key]?.close?.(); } catch (error) { console.warn(`[BARSA][WebCodecs][${key}-timeout-close-failed]`, error); } finally { owner[key] = null; } }
 function wrapCodecError(code, prefix, error) { return error instanceof BarsaError ? error : new BarsaError(code, `${prefix}: ${error?.message || error}`, { recoverable: true, cause: error }); }
+
+async function waitForQueueBelow(codec, maxQueueSize, signal, { label = 'WebCodecs queue drain', onTimeout = null } = {}) {
+  return withHardTimeout(async () => {
+    while (codecQueueSize(codec) >= maxQueueSize) {
+      abortIfNeeded(signal);
+      if (!codec || codec.state !== 'configured') {
+        throw new BarsaError('WEBCODECS_QUEUE_UNAVAILABLE', `${label} stopped because codec is not configured`, { recoverable: true });
+      }
+      await waitForQueue(codec, signal);
+    }
+  }, {
+    timeoutMs: QUEUE_STALL_TIMEOUT_MS,
+    label,
+    signal,
+    onTimeout,
+  });
+}
+
+function codecQueueSize(codec) {
+  const value = codec?.encodeQueueSize ?? codec?.decodeQueueSize ?? 0;
+  return Math.max(0, Number(value) || 0);
+}
 
 async function waitForQueue(codec, signal) {
   abortIfNeeded(signal);
