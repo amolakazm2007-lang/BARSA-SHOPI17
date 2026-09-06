@@ -30,7 +30,9 @@ test('cold-start gate does not classify one transient boot_completed read as reb
 test('cold-start gate validates startup independently of fragile am start waiter', async () => {
   const script = await source();
 
-  assert.doesNotMatch(script, /am start -W/);
+  // Comments may document why `am start -W` is forbidden; reject only an
+  // executable ADB invocation so this contract tests behavior, not prose.
+  assert.doesNotMatch(script, /adb shell am start\s+-W\b/);
   assert.match(script, /start_activity_command\(\)/);
   assert.match(script, /wait_for_app_ready\(\)/);
   assert.match(script, /pidof "\$PACKAGE"/);
