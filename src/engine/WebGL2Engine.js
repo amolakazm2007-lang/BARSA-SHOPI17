@@ -1,3 +1,6 @@
+import { WebGLContextGuard } from './WebGLContextGuard.js';
+import { BarsaError } from './CrashProofRuntime.js';
+
 /** Mobile GPU fallback for the production effects pipeline. */
 export class WebGL2Engine {
   constructor() {
@@ -5,17 +8,22 @@ export class WebGL2Engine {
     this.program = null;
     this.texture = null;
     this.locations = new Map();
+    this.contextGuard = null;
+    this.onFatalLoss = null;
   }
 
   init(canvas, { performanceManager = null } = {}) {
+    this.contextGuard?.dispose?.();
     const gl = canvas.getContext('webgl2', {
       alpha: false, antialias: false, depth: false, stencil: false,
       desynchronized: true, powerPreference: 'high-performance', preserveDrawingBuffer: true,
     });
-    if (!gl) throw new Error('WebGL2 is not available');
+    if (!gl) throw new BarsaError('WEBGL_UNAVAILABLE', 'WebGL2 is not available', { recoverable: true });
     this.gl = gl;
     this.canvas = canvas;
     this.performanceManager = performanceManager;
+    this.contextGuard = new WebGLContextGuard({ canvas });
+    this.contextGuard.addEventListener('lost', ({ detail }) => this.onFatalLoss?.(detail));
     this.program = createProgram(gl, VERTEX, FRAGMENT);
     this.vao = gl.createVertexArray();
     gl.bindVertexArray(this.vao);
@@ -33,41 +41,52 @@ export class WebGL2Engine {
   }
 
   renderFrame(source, effects, { width, height }) {
+    this.contextGuard?.assertAvailable?.();
     const gl = this.gl;
-    if (!gl || gl.isContextLost()) throw new Error('WebGL2 context lost');
-    if (this.canvas.width !== width) this.canvas.width = width;
-    if (this.canvas.height !== height) this.canvas.height = height;
-    gl.viewport(0, 0, width, height);
-    gl.useProgram(this.program);
-    gl.bindVertexArray(this.vao);
-    gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, this.texture);
-    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
-    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
-    this._u('u_texture', 0, true);
-    this._u2('u_texel', 1 / width, 1 / height);
-    const uniforms = {
-      u_brightness: effects.brightness || 0, u_contrast: effects.contrast ?? 1,
-      u_saturation: effects.saturation ?? 1, u_vibrance: effects.vibrance || 0,
-      u_gamma: effects.gamma ?? 1, u_temperature: effects.temperature || 0,
-      u_sharpen: effects.sharpenAmount || 0, u_highpass: effects.highPassAmount || 0,
-      u_denoise: effects.denoiseAmount || 0, u_detail: effects.detailAmount || 0,
-      u_smooth: effects.portraitSmooth || 0, u_exposure: effects.exposure || 0,
-      u_highlights: effects.highlights || 0, u_shadows: effects.shadows || 0,
-      u_whites: effects.whites || 0, u_blacks: effects.blacks || 0,
-      u_dehaze: effects.dehaze || 0, u_vignette: effects.vignette || 0,
-      u_grain: effects.grain || 0, u_deblock: effects.deblockAmount || 0,
-      u_deband: effects.debandAmount || 0, u_artifact: effects.artifactRemoval || 0,
-      u_fine: effects.fineDetailRecovery || 0, u_texture_recovery: effects.textureRecovery || 0, u_detail_fusion: effects.detailFusion || 0,
-      u_edge_recovery: effects.edgeRecovery || 0, u_clarity: effects.clarity || 0,
-      u_local_contrast: effects.localContrast || 0, u_dehalo: effects.dehalo || 0,
-      u_antiring: effects.antiRinging || 0, u_tint: effects.tint || 0,
-      u_lift: effects.lift || 0, u_gain: effects.gain ?? 1,
-    };
-    for (const [name, value] of Object.entries(uniforms)) this._u(name, value);
-    gl.drawArrays(gl.TRIANGLES, 0, 3);
-    gl.flush();
-    this.performanceManager?.setGPUAllocation(width * height * 4);
+    if (!gl) throw new BarsaError('WEBGL_NOT_INITIALIZED', 'WebGL2 engine is not initialized', { recoverable: true });
+    if (gl.isContextLost()) throw new BarsaError('WEBGL_CONTEXT_LOST', 'WebGL2 context lost', { recoverable: true });
+    try {
+      if (this.canvas.width !== width) this.canvas.width = width;
+      if (this.canvas.height !== height) this.canvas.height = height;
+      gl.viewport(0, 0, width, height);
+      gl.useProgram(this.program);
+      gl.bindVertexArray(this.vao);
+      gl.activeTexture(gl.TEXTURE0);
+      gl.bindTexture(gl.TEXTURE_2D, this.texture);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+      this._u('u_texture', 0, true);
+      this._u2('u_texel', 1 / width, 1 / height);
+      const uniforms = {
+        u_brightness: effects.brightness || 0, u_contrast: effects.contrast ?? 1,
+        u_saturation: effects.saturation ?? 1, u_vibrance: effects.vibrance || 0,
+        u_gamma: effects.gamma ?? 1, u_temperature: effects.temperature || 0,
+        u_sharpen: effects.sharpenAmount || 0, u_highpass: effects.highPassAmount || 0,
+        u_denoise: effects.denoiseAmount || 0, u_detail: effects.detailAmount || 0,
+        u_smooth: effects.portraitSmooth || 0, u_exposure: effects.exposure || 0,
+        u_highlights: effects.highlights || 0, u_shadows: effects.shadows || 0,
+        u_whites: effects.whites || 0, u_blacks: effects.blacks || 0,
+        u_dehaze: effects.dehaze || 0, u_vignette: effects.vignette || 0,
+        u_grain: effects.grain || 0, u_deblock: effects.deblockAmount || 0,
+        u_deband: effects.debandAmount || 0, u_artifact: effects.artifactRemoval || 0,
+        u_fine: effects.fineDetailRecovery || 0, u_texture_recovery: effects.textureRecovery || 0, u_detail_fusion: effects.detailFusion || 0,
+        u_edge_recovery: effects.edgeRecovery || 0, u_clarity: effects.clarity || 0,
+        u_local_contrast: effects.localContrast || 0, u_dehalo: effects.dehalo || 0,
+        u_antiring: effects.antiRinging || 0, u_tint: effects.tint || 0,
+        u_lift: effects.lift || 0, u_gain: effects.gain ?? 1,
+      };
+      for (const [name, value] of Object.entries(uniforms)) this._u(name, value);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      gl.flush();
+      const error = gl.getError();
+      if (error !== gl.NO_ERROR) throw new BarsaError('WEBGL_FRAME_FAILED', `WebGL2 error ${error}`, { recoverable: true, details: { glError: error } });
+      this.performanceManager?.setGPUAllocation(width * height * 4);
+    } catch (error) {
+      const wrapped = error instanceof BarsaError ? error : new BarsaError('WEBGL_FRAME_FAILED', `WebGL2 frame failed: ${error?.message || error}`, { recoverable: true, cause: error });
+      console.error('[BARSA][WebGL2][frame-failed]', wrapped);
+      this.onFatalLoss?.(wrapped);
+      throw wrapped;
+    }
   }
 
   _loc(name) {
@@ -79,6 +98,8 @@ export class WebGL2Engine {
 
   destroy() {
     const gl = this.gl;
+    this.contextGuard?.dispose?.();
+    this.contextGuard = null;
     if (gl) {
       if (this.texture) gl.deleteTexture(this.texture);
       if (this.vertexBuffer) gl.deleteBuffer(this.vertexBuffer);
@@ -97,13 +118,21 @@ function createProgram(gl, vertexSource, fragmentSource) {
     const shader = gl.createShader(type);
     gl.shaderSource(shader, source);
     gl.compileShader(shader);
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(shader) || 'Shader failed');
+    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      const message = gl.getShaderInfoLog(shader) || 'Shader failed';
+      gl.deleteShader(shader);
+      throw new BarsaError('WEBGL_SHADER_COMPILE_FAILED', message, { recoverable: true });
+    }
     return shader;
   };
   const vertex = compile(gl.VERTEX_SHADER, vertexSource), fragment = compile(gl.FRAGMENT_SHADER, fragmentSource), program = gl.createProgram();
   gl.attachShader(program, vertex); gl.attachShader(program, fragment); gl.linkProgram(program);
   gl.deleteShader(vertex); gl.deleteShader(fragment);
-  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(program) || 'Program failed');
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+    const message = gl.getProgramInfoLog(program) || 'Program failed';
+    gl.deleteProgram(program);
+    throw new BarsaError('WEBGL_PROGRAM_LINK_FAILED', message, { recoverable: true });
+  }
   return program;
 }
 
