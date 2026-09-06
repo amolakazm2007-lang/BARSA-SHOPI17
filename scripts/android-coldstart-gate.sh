@@ -11,9 +11,28 @@ AVD_NAME="barsa_ci"
 SYSTEM_IMAGE="system-images;android-34;google_apis;x86_64"
 EMU_PID=""
 
+wait_for_adb_device() {
+  local attempts="${1:-18}"
+  local delay="${2:-5}"
+  local state=""
+  for _ in $(seq 1 "$attempts"); do
+    if [[ -n "${EMU_PID:-}" ]] && ! kill -0 "$EMU_PID" 2>/dev/null; then
+      return 2
+    fi
+    state="$(timeout 5s adb get-state 2>/dev/null || true)"
+    if [[ "$state" == "device" ]]; then
+      return 0
+    fi
+    timeout 5s adb reconnect >/dev/null 2>&1 || true
+    sleep "$delay"
+  done
+  return 1
+}
+
 capture_diagnostics() {
   local reason="${1:-unknown}"
   printf '%s\n' "$reason" > reports/android-gate-failure-reason.txt
+  timeout 10s adb devices -l > reports/android-adb-devices-failure.txt 2>&1 || true
   timeout 20s adb logcat -d -v time > reports/android-logcat.txt 2>&1 || true
   timeout 15s adb shell dumpsys activity processes > reports/android-processes.txt 2>&1 || true
   timeout 15s adb shell dumpsys activity exit-info "$PACKAGE" > reports/android-exit-info.txt 2>&1 || true
@@ -21,6 +40,7 @@ capture_diagnostics() {
   timeout 15s adb shell dumpsys window windows > reports/android-windows.txt 2>&1 || true
   timeout 15s adb shell dumpsys meminfo "$PACKAGE" > reports/android-meminfo-failure.txt 2>&1 || true
   timeout 10s adb exec-out screencap -p > reports/android-failure.png 2>/dev/null || true
+  tail -n 200 reports/android-emulator.log > reports/android-emulator-tail.txt 2>/dev/null || true
 }
 
 cleanup() {
@@ -95,6 +115,12 @@ printf 'APK_INSTALLED\n' | tee reports/android-apk-installed.txt
 
 timeout 10s adb logcat -c || true
 for PASS in 1 2 3; do
+  if ! wait_for_adb_device 6 3; then
+    capture_diagnostics "LAUNCH_${PASS}_ADB_OFFLINE_BEFORE_START"
+    echo "Android device went offline before BARSA cold-start pass $PASS" >&2
+    exit 1
+  fi
+
   timeout 10s adb shell am force-stop "$PACKAGE" || true
 
   set +e
@@ -104,12 +130,31 @@ for PASS in 1 2 3; do
   cat "reports/android-launch-${PASS}.log"
 
   if [[ "$START_STATUS" -ne 0 ]]; then
+    if ! wait_for_adb_device 18 5; then
+      capture_diagnostics "LAUNCH_${PASS}_ADB_OFFLINE_DURING_START"
+      echo "Android device went offline during BARSA cold-start pass $PASS" >&2
+      exit 1
+    fi
     capture_diagnostics "LAUNCH_${PASS}_TIMEOUT_OR_FAILURE"
     echo "BARSA cold-start pass $PASS did not complete am start -W within 30 seconds" >&2
     exit 1
   fi
 
   sleep 10
+
+  if ! wait_for_adb_device 18 5; then
+    capture_diagnostics "LAUNCH_${PASS}_ADB_OFFLINE_AFTER_START"
+    echo "Android device went offline after BARSA cold-start pass $PASS; not classifying this as an app crash" >&2
+    exit 1
+  fi
+
+  BOOT_AFTER="$(timeout 5s adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
+  if [[ "$BOOT_AFTER" != "1" ]]; then
+    capture_diagnostics "LAUNCH_${PASS}_DEVICE_REBOOTED"
+    echo "Android guest rebooted during BARSA cold-start pass $PASS" >&2
+    exit 1
+  fi
+
   PID="$(timeout 10s adb shell pidof "$PACKAGE" 2>/dev/null || true)"
   PID="$(printf '%s' "$PID" | tr -d '\r')"
   if [[ -z "$PID" ]]; then
@@ -126,7 +171,6 @@ for PASS in 1 2 3; do
     echo "BARSA process exists but MainActivity is not resumed during pass $PASS" >&2
     exit 1
   fi
-
 done
 
 timeout 10s adb exec-out screencap -p > reports/android-startup.png 2>/dev/null || true
