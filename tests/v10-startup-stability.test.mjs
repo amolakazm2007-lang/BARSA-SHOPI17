@@ -25,13 +25,22 @@ test('Android shell fail-closes automatic model downloads on cold start', async 
   assert.match(activity, /nativeAi\.releaseSessions\(\)/);
 });
 
-test('release CI performs real APK cold-start crash and ANR gating', async () => {
+test('release CI boots a real Android AVD and proves the app-launch script executed', async () => {
   const workflow = await read('.github/workflows/build-apk.yml');
-  assert.match(workflow, /android-emulator-runner@v2/);
+  assert.match(workflow, /system-images;android-34;google_apis;x86_64/);
+  assert.match(workflow, /avdmanager create avd/);
+  assert.match(workflow, /ANDROID_HOME\/emulator\/emulator/);
+  assert.match(workflow, /sys\.boot_completed/);
+  assert.match(workflow, /EMULATOR_BOOTED/);
+  assert.match(workflow, /SCRIPT_ENTERED/);
+  assert.match(workflow, /APK_INSTALLED/);
   assert.match(workflow, /am start -W -n com\.barsa\.shopi\/\.MainActivity/);
   assert.match(workflow, /for PASS in 1 2 3/);
   assert.match(workflow, /pidof com\.barsa\.shopi/);
+  assert.match(workflow, /LOGCAT_CAPTURED/);
   assert.match(workflow, /FATAL EXCEPTION/);
   assert.match(workflow, /ANR in com\\\.barsa\\\.shopi/);
   assert.match(workflow, /android-startup\.png/);
+  assert.match(workflow, /grep -qx 'PASSED' reports\/android-coldstart-gate\.txt/);
+  assert.doesNotMatch(workflow, /infrastructure did not reach the app-launch script; APK release continues/);
 });
