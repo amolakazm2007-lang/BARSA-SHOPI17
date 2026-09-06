@@ -1,0 +1,165 @@
+name: BARSA Android RC Verification
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ crashproof-phase1-professional ]
+    paths:
+      - 'src/**'
+      - 'android/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/android-rc-verify.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: barsa-android-rc-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android-rc:
+    runs-on: ubuntu-latest
+    timeout-minutes: 110
+
+    steps:
+      - name: Checkout exact candidate commit
+        uses: actions/checkout@v4
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK and emulator image
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null || true
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-36" \
+            "build-tools;36.0.0" \
+            "emulator" \
+            "system-images;android-34;google_apis;x86_64"
+
+      - name: Setup Gradle 8.11.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.11.1'
+
+      - name: Install exact dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Verify runtime and full JavaScript suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p reports
+          npm run prepare:runtime 2>&1 | tee reports/runtime-prepare.log
+          npm run verify:runtime 2>&1 | tee reports/runtime-verify.log
+          npm test 2>&1 | tee reports/js-tests.log
+          npm run check:release-invariants 2>&1 | tee reports/release-invariants.log
+          npm audit --omit=dev --audit-level=moderate --json > reports/npm-audit.json
+
+      - name: Build and sync exact web candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm run build 2>&1 | tee reports/web-build.log
+          node scripts/sync-android.mjs 2>&1 | tee reports/android-sync.log
+
+      - name: Android lint unit and assembly gates
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle -p android \
+            :app:lintDebug \
+            :app:lintRelease \
+            :app:testDebugUnitTest \
+            :app:assembleDebug \
+            :app:assembleRelease \
+            --stacktrace --no-daemon 2>&1 | tee reports/android-build-gates.log
+
+      - name: Enable KVM
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          test -e /dev/kvm
+          ls -l /dev/kvm
+
+      - name: Execute three-pass Android cold-start gate
+        shell: bash
+        run: |
+          set -euo pipefail
+          chmod +x scripts/android-coldstart-gate.sh
+          scripts/android-coldstart-gate.sh
+
+      - name: Validate process startup and logcat evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f reports/android-emulator-booted.txt
+          test -f reports/android-script-entered.txt
+          test -f reports/android-apk-installed.txt
+          for PASS in 1 2 3; do test -f "reports/android-launch-${PASS}-pid.txt"; done
+          test -s reports/android-logcat.txt
+          test -s reports/android-meminfo.txt
+          grep -qx 'PASSED' reports/android-coldstart-gate.txt
+          if grep -E "FATAL EXCEPTION|ANR in com\.barsa\.shopi|am_crash.*com\.barsa\.shopi|Process com\.barsa\.shopi .* has died" reports/android-logcat.txt; then
+            echo 'FAIL: app crash or ANR signature detected' | tee reports/android-rc-summary.txt
+            exit 1
+          fi
+          echo 'PASS: Android RC cold-start and logcat gates' | tee reports/android-rc-summary.txt
+
+      - name: Package honest RC evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p rc/reports
+          DEBUG_APK="$(find android/app/build/outputs/apk/debug -name '*.apk' | head -n 1)"
+          RELEASE_APK="$(find android/app/build/outputs/apk/release -name '*.apk' | head -n 1)"
+          test -s "$DEBUG_APK"
+          test -s "$RELEASE_APK"
+          cp "$DEBUG_APK" rc/BARSA-SHOPI-v10.0.0-RC-debug-installable.apk
+          cp "$RELEASE_APK" rc/BARSA-SHOPI-v10.0.0-RC-release-unsigned.apk
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$DEBUG_APK" > rc/reports/debug-badging.txt
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$RELEASE_APK" > rc/reports/release-badging.txt
+          grep -q "package: name='com.barsa.shopi'" rc/reports/debug-badging.txt
+          grep -q "package: name='com.barsa.shopi'" rc/reports/release-badging.txt
+          sha256sum rc/*.apk > rc/reports/SHA256SUMS.txt
+          printf '%s\n' "candidate_commit=${GITHUB_SHA}" "debug_apk=installable-test-only" "release_apk=unsigned-not-final" > rc/reports/RC-MANIFEST.txt
+          cp reports/* rc/reports/ 2>/dev/null || true
+
+      - name: Upload Android RC package
+        uses: actions/upload-artifact@v4
+        with:
+          name: BARSA-SHOPI-v10.0.0-ANDROID-RC-${{ github.run_number }}
+          path: rc/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: BARSA-ANDROID-RC-DIAGNOSTICS-${{ github.run_number }}
+          path: reports/
+          if-no-files-found: warn
+          retention-days: 14
