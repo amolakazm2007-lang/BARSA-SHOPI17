@@ -35,17 +35,42 @@ jobs:
           node scripts/apply-p0-output-lease-fixes.mjs
       - name: Update vulnerable build and browser dependencies safely
         run: npm install --save-dev --save-exact vite@6.4.3 playwright@1.63.0 --package-lock-only
-      - name: Persist deterministic integration updates
+      - name: Persist deterministic integration updates safely
         run: |
-          if git diff --quiet; then
-            echo "No generated source or dependency changes to commit."
-          else
-            git config user.name "github-actions[bot]"
-            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          for attempt in 1 2 3; do
+            echo "Persistence attempt ${attempt}/3"
+            git fetch origin crashproof-final
+            git reset --hard origin/crashproof-final
+
+            node scripts/apply-crashproof-video-pipeline.mjs
+            node scripts/apply-crashproof-storage-integrity.mjs
+            node scripts/apply-crashproof-rife.mjs
+            node scripts/apply-crashproof-upscale.mjs
+            node scripts/apply-crashproof-face.mjs
+            node scripts/apply-p0-e2e-runtime-fixes.mjs
+            node scripts/apply-p0-output-lease-fixes.mjs
+            npm install --save-dev --save-exact vite@6.4.3 playwright@1.63.0 --package-lock-only
+
+            if git diff --quiet; then
+              echo "Generated sources already synchronized with latest crashproof-final."
+              exit 0
+            fi
+
             git add src/main.js src/engine/VideoPipeline.js src/engine/WebGL2Engine.js src/engine/StorageManager.js src/engine/ApplyStackEngine.js src/engine/RIFEEngine.js src/engine/UpscaleEngine.js src/engine/FaceRestorationEngine.js package.json package-lock.json
             git commit -m "Apply crash-proof pipeline integration and security updates"
-            git push origin HEAD:crashproof-final
-          fi
+            if git push origin HEAD:crashproof-final; then
+              echo "Generated integration persisted by fast-forward push."
+              exit 0
+            fi
+
+            echo "Branch advanced during persistence; retrying from latest remote head."
+          done
+
+          echo "Unable to persist generated integration after three fast-forward attempts." >&2
+          exit 1
       - name: Normalize final version metadata
         run: node scripts/normalize-version-lock.mjs
       - run: npm ci
