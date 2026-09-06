@@ -21,7 +21,9 @@ jobs:
           node-version: '22'
           cache: npm
       - name: Apply deterministic crash-proof integration
-        run: node scripts/apply-crashproof-video-pipeline.mjs
+        run: |
+          node scripts/apply-crashproof-video-pipeline.mjs
+          node scripts/apply-crashproof-storage-integrity.mjs
       - name: Update vulnerable build and browser dependencies safely
         run: npm install --save-dev --save-exact vite@6.4.3 playwright@1.63.0 --package-lock-only
       - name: Persist deterministic integration updates
@@ -31,7 +33,7 @@ jobs:
           else
             git config user.name "github-actions[bot]"
             git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-            git add src/engine/VideoPipeline.js package.json package-lock.json
+            git add src/engine/VideoPipeline.js src/engine/StorageManager.js package.json package-lock.json
             git commit -m "Apply crash-proof pipeline integration and security updates"
             git push origin HEAD:crashproof-final
           fi
