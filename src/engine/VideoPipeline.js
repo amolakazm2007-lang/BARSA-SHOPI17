@@ -14,7 +14,7 @@ import { RenderStabilityMonitor } from './RenderStabilityMonitor.js';
 import { FrameIntegrityMonitor } from './FrameIntegrityMonitor.js';
 import { RenderLoadGovernor } from './RenderLoadGovernor.js';
 import { AdaptiveBackpressure } from './AdaptiveBackpressure.js';
-import { createQualityLockFingerprint } from './RenderFingerprint.js';
+import { createQualityLockFingerprint, assertQualityLockFingerprint } from './RenderFingerprint.js';
 import { TypedArrayPool } from './TypedArrayPool.js';
 import { ProgressWatchdog } from './CrashProofRuntime.js';
 import { CrashProofFallbackPolicy } from './CrashProofFallbackPolicy.js';
@@ -241,6 +241,9 @@ export class VideoPipeline {
         settings, width: outputSize.width, height: outputSize.height, fps: targetFps, bitrate,
         models: { upscale: settings.upscaleModelId || null, rife: settings.rifeModelId || null, face: settings.faceModelId || null },
       });
+      if (resuming && resumeCheckpoint?.qualityLockFingerprint) {
+        assertQualityLockFingerprint(resumeCheckpoint.qualityLockFingerprint, qualityLockFingerprint, { phase: 'resume' });
+      }
       codecs.setMaxQueueSize?.(safeCodecQueue);
       update({ stage:'render-plan', detail:`${renderPlan.tier} · load ${renderPlan.loadScore} · queue ${renderPlan.codecQueue} · tile ${renderPlan.tileSize || engines.tiles.tileSize} · RAM ${renderPlan.memoryBudgetMB || '—'} MB` });
 
@@ -861,6 +864,12 @@ export class VideoPipeline {
         trackValidation = validateMP4Tracks(outputMetadata, { width: outputSize.width, height: outputSize.height, expectAudio: wantsAudio });
         avSyncValidation = validateAVSync({ expectedVideoDuration: duration, outputDuration: outputMetadata.duration, nativeAudioStats, expectAudio: wantsAudio });
       }
+      const finalQualityLockFingerprint = await createQualityLockFingerprint({
+        settings, width: outputSize.width, height: outputSize.height, fps: targetFps, bitrate,
+        models: { upscale: settings.upscaleModelId || null, rife: settings.rifeModelId || null, face: settings.faceModelId || null },
+      });
+      assertQualityLockFingerprint(qualityLockFingerprint, finalQualityLockFingerprint, { phase: 'commit' });
+
       // OPFS-backed File/Blob objects are not portable snapshots in Chromium: deleting
       // their directory entry can invalidate a blob: URL that has not finished opening.
       // Keep exactly one durable final MP4 leased to the consumer, while removing
@@ -898,6 +907,7 @@ export class VideoPipeline {
           aiUpscaleGraphCapture: aiUpscaleActive ? Boolean(upscale.graphCaptureEnabled) : false,
           aiUpscaleTileSize: qualityLockedTileSize,
           qualityLockedRender: true,
+          qualityLockFingerprint: finalQualityLockFingerprint,
           aiTensorPool: aiUpscaleActive ? upscale.tensorPool?.stats?.() || null : null,
           rifeTensorPool: rifeActive ? rife.tensorPool?.stats?.() || null : null,
           aiWorkingSize: aiWork ? `${aiWork.inputWidth}×${aiWork.inputHeight}→${aiWork.outputWidth}×${aiWork.outputHeight}` : null,

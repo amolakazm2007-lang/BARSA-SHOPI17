@@ -16,6 +16,17 @@ async function sha256Hex(text) {
 }
 
 /** Fingerprints only render semantics, excluding adaptive queue/preview knobs. */
+export function assertQualityLockFingerprint(expected, actual, { phase = 'render' } = {}) {
+  if (!expected?.hash || !actual?.hash) return true;
+  if (expected.hash === actual.hash && expected.algorithm === actual.algorithm) return true;
+  const error = new Error(`Final render quality lock changed during ${phase}; resume/commit blocked`);
+  error.name = 'QualityLockViolationError';
+  error.code = 'QUALITY_LOCK_VIOLATION';
+  error.recoverable = false;
+  error.details = { phase, expected: { algorithm: expected.algorithm, hash: expected.hash }, actual: { algorithm: actual.algorithm, hash: actual.hash } };
+  throw error;
+}
+
 export async function createQualityLockFingerprint({ settings = {}, width, height, fps, bitrate, models = {} } = {}) {
   const semantic = {
     width, height, fps, bitrate,
