@@ -349,6 +349,23 @@ export class StorageManager {
     });
   }
 
+  /** Verify that the durable OPFS stream still matches the active checkpoint. */
+  async verifySessionIntegrity(sessionId) {
+    const checkpoint = await this.getCheckpoint(sessionId);
+    if (!checkpoint?.fileName) return { ok: false, reason: 'checkpoint-or-file-missing', sessionId };
+    const expectedBytes = Math.max(0, Number(checkpoint.bytesWritten) || 0);
+    const expectedFrames = Math.max(0, Number(checkpoint.durableEncodedFrames ?? checkpoint.framesWritten) || 0);
+    try {
+      const root = await this._getRoot();
+      const file = await (await root.getFileHandle(checkpoint.fileName)).getFile();
+      const ok = file.size >= expectedBytes;
+      return { ok, sessionId, fileName: checkpoint.fileName, fileSize: file.size, expectedBytes, expectedFrames, reason: ok ? null : 'opfs-file-truncated' };
+    } catch (error) {
+      console.error('[BARSA][storage][integrity-check-failed]', { sessionId, error });
+      return { ok: false, sessionId, expectedBytes, expectedFrames, reason: 'opfs-file-unavailable', error: error?.message || String(error) };
+    }
+  }
+
   /**
    * Finds the most recent interrupted (in_progress, not completed/aborted)
    * session, if any — this is the real mechanism behind "auto-resume
