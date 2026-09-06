@@ -128,6 +128,12 @@ export class BarsaDoctor {
         await capture('stress-device-suite', async () => this.manager.deviceTest.run({ autoInstallModels: false, onProgress: stage => onProgress?.(`stress:${stage}`) }));
       }
 
+      await capture('runtime-fault-ledger', async () => {
+        const snapshot = this.manager.faultLedger?.snapshot?.({ recentLimit: 24 }) || { totalEvents: 0, activeGroups: 0, errorGroups: 0, groups: [], recent: [] };
+        if (snapshot.errorGroups > 0) issues.push(issue('runtime-fault-history', 'medium', `Runtime fault ledger contains ${snapshot.errorGroups} active error group(s); inspect the grouped evidence before release.`));
+        return snapshot;
+      });
+
       const failCount = Object.values(checks).filter(v => v.status === 'FAIL').length;
       const severe = issues.filter(v => v.severity === 'high').length;
       const verdict = failCount || severe ? 'ATTENTION' : issues.length ? 'GOOD_WITH_NOTES' : 'HEALTHY';
@@ -137,6 +143,7 @@ export class BarsaDoctor {
         healthScore: healthScore(checks, issues),
         componentHealth: componentScores(checks, issues),
         devicePassport: this.manager.performancePassport?.snapshot?.() || null,
+        runtimeFaults: this.manager.faultLedger?.snapshot?.({ recentLimit: 24 }) || null,
         safeRepairCount: issues.filter(v => v.repair).length,
         note: 'BARSA Doctor repairs are allow-listed, transactional, post-verified, and never change final-render quality or delete a verified model automatically.',
       };
