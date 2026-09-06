@@ -494,7 +494,6 @@
       <article><span>الحركة والإطارات</span><b>RIFE · زيادة الإطارات</b><select id="rifeModelProfile"><option value="rife-tensorstack">RIFE 4.9 · تلقائي</option><option value="rife47-emmajohnson311">RIFE 4.7 · تلقائي</option><option value="rife-compatible">ONNX متوافق · يدوي</option></select><small id="rifeModelState">غير مثبت</small><div class="model-actions"><button data-install="rife" type="button">تثبيت تلقائي</button><button data-import="rife" type="button">استيراد ONNX</button></div></article>
       <article><span>ترميم الوجوه والبورتريه</span><b>GFPGAN / CodeFormer</b><select id="faceModelProfile"><option value="gfpgan-1.4">GFPGAN 1.4 · تلقائي</option><option value="codeformer">CodeFormer · تلقائي</option></select><small id="faceModelState">غير مثبت</small><div class="model-actions"><button data-install="face" type="button">تثبيت تلقائي</button><button data-import="face" type="button">استيراد ONNX</button></div></article>
       <article><span>اكتشاف الوجوه</span><b>OpenCV YuNet · ONNX</b><small id="faceDetectorModelState">كاشف اختياري أدق للوجوه الصغيرة والجانبية، ويعمل تلقائياً مع ترميم الوجه.</small><div class="model-actions"><button id="faceDetectorInstallBtn" type="button">تثبيت موثوق · 230KB</button><button id="faceDetectorImportBtn" type="button">استيراد ONNX</button></div></article>
-      <article class="nihui-card"><span>مكتبة NIHUI / NCNN</span><b>استيراد حزمة Nihui الأصلية</b><div class="nihui-row"><select id="nihuiRole"><option value="upscale">رفع الدقة</option><option value="rife">RIFE</option><option value="face">الوجه</option></select><button id="nihuiImportBtn" type="button">اختر .param + .bin</button></div><small id="nihuiModelState">تُحفظ وتُفحص محلياً. التشغيل داخل المتصفح يحتاج نسخة ONNX أو NCNN-WASM مخصصاً؛ Vulkan الأصلي لا يعمل داخل صفحة ويب.</small></article>
     </div>
     <section class="model-health-panel">
       <div class="section-title"><span>فحص وإصلاح النماذج</span></div>
@@ -510,7 +509,6 @@
       <div class="model-url-row"><input id="modelURL" type="url" inputmode="url" placeholder="https://… رابط نموذج ONNX متوافق"><button id="modelURLBtn" type="button">استيراد الرابط</button></div>
       <pre id="modelHealthDetails">اختر نموذجاً لعرض الإصدار والغرض والمصدر والبصمة والتوقيع ومحرك التنفيذ.</pre>
     </section>
-    <input id="nihuiModelInput" type="file" accept=".param,.bin,application/octet-stream,text/plain" multiple hidden>
   </dialog>
 
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>

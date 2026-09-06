@@ -4,24 +4,16 @@ import { WebCodecsEngine, getSupportedCodecs } from './WebCodecsEngine.js';
 import { WebGPUEngine } from './WebGPUEngine.js';
 import { WebGL2Engine } from './WebGL2Engine.js';
 import { ModelManager } from './ModelManager.js';
-import { NihuiModelBridge } from './NihuiModelBridge.js';
-import { RIFEEngine } from './RIFEEngine.js';
-import { UpscaleEngine } from './UpscaleEngine.js';
-import { FaceRestorationEngine } from './FaceRestorationEngine.js';
 import { AudioEngine } from './AudioEngine.js';
-import { FFmpegEngine } from './FFmpegEngine.js';
 import { TileProcessor } from './TileProcessor.js';
 import { MediaInputEngine } from './MediaInputEngine.js';
 import { DeviceGuard } from './DeviceGuard.js';
 import { HardwareProbe } from './HardwareProbe.js';
 import { TemporalConsistencyEngine } from './TemporalConsistencyEngine.js';
 import { supportsNativeAAC } from './NativeMP4Muxer.js';
-import { QualityMetricsEngine } from './QualityMetricsEngine.js';
-import { FaceDetectorEngine } from './FaceDetectorEngine.js';
 import { QualityEngine } from './QualityEngine.js';
 import { ColorEngine } from './ColorEngine.js';
 import { MotionBlurEngine } from './MotionBlurEngine.js';
-import { FullDeviceTestEngine } from './FullDeviceTestEngine.js';
 import { StabilizationEngine } from './StabilizationEngine.js';
 import { TemporalReconstructionEngine } from './TemporalReconstructionEngine.js';
 import { RenderResilienceEngine } from './RenderResilienceEngine.js';
@@ -36,6 +28,7 @@ import { BoundedAsyncQueue } from './BoundedAsyncQueue.js';
 import { ResourceScope } from './ResourceScope.js';
 import { RuntimeFaultLedger } from './RuntimeFaultLedger.js';
 import { RuntimeFaultReporter } from './RuntimeFaultReporter.js';
+import { createModuleLazyEngine } from './LazyEngineFacade.js';
 
 const TERMINAL_STATES = new Set(['completed', 'failed', 'cancelled']);
 const LAZY_CLEANUP_METHODS = new Set(['destroy', 'dispose', 'release', 'releaseAll', 'releaseMemory', 'terminate', 'close']);
@@ -45,10 +38,26 @@ export class EngineManager extends EventTarget {
     super();
     const storage = new StorageManager();
     const models = new ModelManager();
-    const rife = createLazyEngineHandle('rife', () => new RIFEEngine(models));
-    const upscale = createLazyEngineHandle('upscale', () => new UpscaleEngine(models));
-    const faceDetector = createLazyEngineHandle('faceDetector', () => new FaceDetectorEngine(models));
-    const face = createLazyEngineHandle('face', () => new FaceRestorationEngine(models, faceDetector));
+    const rife = createModuleLazyEngine('rife', async () => {
+      const { RIFEEngine } = await import('./RIFEEngine.js');
+      return new RIFEEngine(models);
+    });
+    const upscale = createModuleLazyEngine('upscale', async () => {
+      const { UpscaleEngine } = await import('./UpscaleEngine.js');
+      return new UpscaleEngine(models);
+    });
+    const faceDetector = createModuleLazyEngine('faceDetector', async () => {
+      const { FaceDetectorEngine } = await import('./FaceDetectorEngine.js');
+      return new FaceDetectorEngine(models);
+    });
+    const face = createModuleLazyEngine('face', async () => {
+      const { FaceRestorationEngine } = await import('./FaceRestorationEngine.js');
+      return new FaceRestorationEngine(models, faceDetector);
+    });
+    const ffmpeg = createModuleLazyEngine('ffmpeg', async () => {
+      const { FFmpegEngine } = await import('./FFmpegEngine.js');
+      return new FFmpegEngine();
+    });
     this.engines = {
       storage,
       performance: new PerformanceManager(this),
@@ -56,19 +65,17 @@ export class EngineManager extends EventTarget {
       gpu: new WebGPUEngine(),
       webgl: new WebGL2Engine(),
       models,
-      nihui: new NihuiModelBridge(),
       rife,
       upscale,
       faceDetector,
       face,
       audio: new AudioEngine(),
-      ffmpeg: new FFmpegEngine(),
+      ffmpeg,
       tiles: new TileProcessor(),
       media: new MediaInputEngine(),
       deviceGuard: new DeviceGuard(),
       hardware: new HardwareProbe(),
       temporal: new TemporalConsistencyEngine(),
-      qualityMetrics: new QualityMetricsEngine(),
       quality: new QualityEngine(),
       color: new ColorEngine(),
       blur: new MotionBlurEngine(),
@@ -101,7 +108,11 @@ export class EngineManager extends EventTarget {
       source: 'EngineManager',
       getActiveJobId: () => this.activeJobId,
     });
-    this.deviceTest = new FullDeviceTestEngine(this);
+    this.engines.gpu.setFaultReporter?.(this.faultReporter);
+    for (const key of ['rife', 'upscale', 'faceDetector', 'face', 'ffmpeg']) {
+      this.engines[key].setFaultReporter?.(this.faultReporter);
+    }
+    this.deviceTest = createLazyDeviceTestHandle(this);
     this.doctor = new BarsaDoctor(this);
   }
 
@@ -446,7 +457,6 @@ export class EngineManager extends EventTarget {
       if (engine) await engine.destroy?.();
     }
     this.engines.temporal.destroy();
-    this.engines.qualityMetrics.destroy();
     this.engines.color.destroy();
     this.engines.blur.destroy();
     this.engines.audio.destroy();
@@ -454,7 +464,6 @@ export class EngineManager extends EventTarget {
     this.engines.media.destroy();
     await this.engines.deviceGuard.release();
     this.engines.models.close();
-    this.engines.nihui.close();
     await this.engines.storage.close();
   }
 
@@ -548,4 +557,24 @@ function structuredCloneSafe(value) {
 
 function serializeError(error) {
   return { name: error?.name || 'Error', message: error?.message || String(error), stack: error?.stack || null, code: error?.code || null, recoverable: error?.recoverable === true };
+}
+
+
+function createLazyDeviceTestHandle(manager) {
+  let instancePromise = null;
+  const load = () => {
+    if (!instancePromise) {
+      instancePromise = import('./FullDeviceTestEngine.js')
+        .then(({ FullDeviceTestEngine }) => new FullDeviceTestEngine(manager))
+        .catch((error) => {
+          instancePromise = null;
+          throw error;
+        });
+    }
+    return instancePromise;
+  };
+  return Object.freeze({
+    run: (...args) => load().then((engine) => engine.run(...args)),
+    __peek: () => instancePromise,
+  });
 }

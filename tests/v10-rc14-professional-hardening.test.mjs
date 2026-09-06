@@ -244,16 +244,6 @@ test('RC14 StorageManager removes stale active writer state on durable checkpoin
   assert.match(src, /async _mutateCheckpoint\(sessionId, mutate\)/);
 });
 
-test('RC14 Nihui pack import is size-bounded, sanitized and cleans OPFS if metadata commit fails', () => {
-  const src = fs.readFileSync(new URL('../src/engine/NihuiModelBridge.js', import.meta.url), 'utf8');
-  assert.match(src, /MAX_NCNN_PACK_BYTES = 512 \* 1024 \* 1024/);
-  assert.match(src, /await ensureStorageCapacity\(total\)/);
-  assert.match(src, /const paramFile = sanitizeFileName\(param\.name\)/);
-  assert.match(src, /const weightsFile = sanitizeFileName\(weights\.name\)/);
-  assert.match(src, /removeEntry\(id, \{ recursive: true \}\)/);
-  assert.match(src, /error\.code = 'INSUFFICIENT_STORAGE'/);
-});
-
 test('RC14 storage shutdown and deletion drain queued checkpoint mutations before DB cleanup', () => {
   const src = fs.readFileSync(new URL('../src/engine/StorageManager.js', import.meta.url), 'utf8');
   const deleteBody = src.slice(src.indexOf('async deleteSession(sessionId)'), src.indexOf('async getStorageUsage'));

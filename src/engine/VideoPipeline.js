@@ -1,7 +1,7 @@
 import { FrameSequencer } from './FrameSequencer.js';
 import { ElementaryVideoWriter, chooseEncoderConfig } from './WebCodecsEngine.js';
-import { QUALITY_PRESETS } from './FFmpegEngine.js';
-import { MODEL_REGISTRY, imageDataToChwFloat32, chwFloat32ToImageData } from './UpscaleEngine.js';
+import { QUALITY_PRESETS, UPSCALE_RENDER_CATALOG as MODEL_REGISTRY } from './RenderCatalog.js';
+import { imageDataToChwFloat32, chwFloat32ToImageData } from './TensorImageUtils.js';
 import { applyRealtimeEffects } from './RealtimePreviewEngine.js';
 import { muxIVFToWebM } from './WebMMuxer.js';
 import { NativeMP4Muxer, supportsNativeAAC } from './NativeMP4Muxer.js';
@@ -40,7 +40,7 @@ export class VideoPipeline {
       ffmpeg,
       media,
       temporal,
-      qualityMetrics,
+
       quality: qualityEngine,
       color,
       blur,
@@ -557,7 +557,7 @@ export class VideoPipeline {
         } else {
           colorDiagnostics = { applied: false };
         }
-        qualityMetrics.sample(outputCanvas, encodedFrames);
+
         renderPreview?.draw(outputCanvas, timestamp);
 
         const normalizedTimestamp = Math.max(0, Math.round(timestamp));
@@ -935,7 +935,7 @@ export class VideoPipeline {
           resumeSourceFrameIndex: resuming ? resumeSourceFrameIndex : null,
           audioPath: nativeAudioStats ? 'WebCodecs AAC · streaming' : wantsAudio ? 'FFmpeg AAC' : 'disabled',
           nativeAudioStats,
-          qualityAudit: qualityMetrics.finalize(),
+          qualityAudit: null,
           renderStability: stability.finalize(),
           resilience: resilience?.diagnostics?.() || null,
         renderPlan,
@@ -959,7 +959,7 @@ export class VideoPipeline {
       temporal.reset();
       temporalReconstruction.destroy?.();
       stabilization.destroy?.();
-      qualityMetrics.reset();
+
       blur.destroy();
       cpuFrameWorker.destroy();
       if (ffmpegWasUsed) ffmpeg.terminate();
