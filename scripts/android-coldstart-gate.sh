@@ -29,6 +29,21 @@ wait_for_adb_device() {
   return 1
 }
 
+read_boot_id() {
+  local attempts="${1:-6}"
+  local delay="${2:-2}"
+  local boot_id=""
+  for _ in $(seq 1 "$attempts"); do
+    boot_id="$(timeout 5s adb shell cat /proc/sys/kernel/random/boot_id 2>/dev/null | tr -d '\r\n' || true)"
+    if [[ -n "$boot_id" ]]; then
+      printf '%s' "$boot_id"
+      return 0
+    fi
+    sleep "$delay"
+  done
+  return 1
+}
+
 capture_diagnostics() {
   local reason="${1:-unknown}"
   printf '%s\n' "$reason" > reports/android-gate-failure-reason.txt
@@ -99,6 +114,13 @@ if [[ "$BOOTED" != "1" ]]; then
   exit 1
 fi
 
+if ! INITIAL_BOOT_ID="$(read_boot_id 8 2)"; then
+  capture_diagnostics 'EMULATOR_BOOT_ID_UNAVAILABLE'
+  echo 'Android emulator booted but stable boot identity could not be read' >&2
+  exit 1
+fi
+printf 'BOOT_ID=%s\n' "$INITIAL_BOOT_ID" | tee reports/android-boot-id.txt
+
 printf 'EMULATOR_BOOTED\n' | tee reports/android-emulator-booted.txt
 printf 'SCRIPT_ENTERED\n' | tee reports/android-script-entered.txt
 timeout 10s adb devices -l | tee reports/android-adb-devices.txt
@@ -148,10 +170,15 @@ for PASS in 1 2 3; do
     exit 1
   fi
 
-  BOOT_AFTER="$(timeout 5s adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r' || true)"
-  if [[ "$BOOT_AFTER" != "1" ]]; then
+  if ! CURRENT_BOOT_ID="$(read_boot_id 8 2)"; then
+    capture_diagnostics "LAUNCH_${PASS}_BOOT_ID_UNAVAILABLE"
+    echo "Android device remained online but boot identity could not be read after pass $PASS" >&2
+    exit 1
+  fi
+  printf 'LAUNCH_%s_BOOT_ID=%s\n' "$PASS" "$CURRENT_BOOT_ID" | tee "reports/android-launch-${PASS}-boot-id.txt"
+  if [[ "$CURRENT_BOOT_ID" != "$INITIAL_BOOT_ID" ]]; then
     capture_diagnostics "LAUNCH_${PASS}_DEVICE_REBOOTED"
-    echo "Android guest rebooted during BARSA cold-start pass $PASS" >&2
+    echo "Android guest boot identity changed during BARSA cold-start pass $PASS" >&2
     exit 1
   fi
 
