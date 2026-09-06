@@ -23,6 +23,7 @@ public final class MainActivity extends Activity {
     private static final int FILE_CHOOSER = 9049;
     private static final long STARTUP_WATCHDOG_MS = 8000L;
     private WebView webView;
+    private int webViewGeneration = 0;
     private ValueCallback<Uri[]> fileCallback;
     private AssetServer assetServer;
     private NativeAiRuntime nativeAi;
@@ -38,7 +39,7 @@ public final class MainActivity extends Activity {
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         configureWindow();
-        webView = new WebView(this); setContentView(webView); applyWindowInsets(webView);
+        webView = new WebView(this); webViewGeneration++; setContentView(webView); applyWindowInsets(webView);
         // NativeAiRuntime is intentionally lightweight at construction time. ORT
         // itself is lazy-loaded on the first real AI request, never during launch.
         nativeAi = new NativeAiRuntime(this);
@@ -56,7 +57,12 @@ public final class MainActivity extends Activity {
         getWindow().setNavigationBarColor(Color.TRANSPARENT);
     }
 
+    private boolean isCurrentWebView(WebView target, int generation) {
+        return target != null && target == webView && generation == webViewGeneration && !isFinishing() && !isDestroyed();
+    }
+
     private void applyWindowInsets(WebView target) {
+        final int targetGeneration = webViewGeneration;
         ViewCompat.setOnApplyWindowInsetsListener(target, (view, insets) -> {
             Insets system = insets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
             Insets ime = insets.getInsets(WindowInsetsCompat.Type.ime());
@@ -64,7 +70,7 @@ public final class MainActivity extends Activity {
             view.setPadding(system.left, system.top, system.right, system.bottom);
             int imeExtra = imeVisible ? Math.max(0, ime.bottom - system.bottom) : 0;
             target.post(() -> {
-                if (target != webView) return;
+                if (!isCurrentWebView(target, targetGeneration)) return;
                 target.evaluateJavascript(
                     "(function(){var d=document.documentElement;if(!d)return;" +
                     "d.dataset.imeVisible='" + (imeVisible ? "1" : "0") + "';" +
@@ -208,16 +214,19 @@ public final class MainActivity extends Activity {
         if (nativeBridge != null) nativeBridge.cancelAllExports();
         if (nativeAi != null) nativeAi.releaseSessions();
         getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        if (webView != null) {
-            try { webView.removeJavascriptInterface("BarsaAndroid"); } catch (Exception ignored) {}
-            try { webView.destroy(); } catch (Exception ignored) {}
+        WebView stale = webView;
+        webView = null;
+        webViewGeneration++;
+        if (stale != null) {
+            try { ViewCompat.setOnApplyWindowInsetsListener(stale, null); } catch (Exception ignored) {}
+            try { stale.removeJavascriptInterface("BarsaAndroid"); } catch (Exception ignored) {}
+            try { stale.destroy(); } catch (Exception ignored) {}
         }
+        webView = new WebView(this); webViewGeneration++; setContentView(webView); applyWindowInsets(webView); configureWebView();
         if (repeated && crashed) {
-            webView = new WebView(this); setContentView(webView); applyWindowInsets(webView); configureWebView();
             showNativeStartupError("Android WebView stopped repeatedly. BARSA released AI memory to prevent a crash loop.");
             return;
         }
-        webView = new WebView(this); setContentView(webView); applyWindowInsets(webView); configureWebView();
         mainHandler.postDelayed(this::loadApp, 180L);
     }
 
@@ -243,7 +252,12 @@ public final class MainActivity extends Activity {
         if (nativeAi != null && level >= TRIM_MEMORY_RUNNING_LOW) nativeAi.releaseSessions();
         if (webView == null || level < TRIM_MEMORY_RUNNING_LOW) return;
         final int pressure = level;
-        webView.post(() -> webView.evaluateJavascript("window.dispatchEvent(new CustomEvent('barsa-memory-pressure',{detail:{level:" + pressure + "}}));", null));
+        final WebView target = webView;
+        final int targetGeneration = webViewGeneration;
+        target.post(() -> {
+            if (!isCurrentWebView(target, targetGeneration)) return;
+            target.evaluateJavascript("window.dispatchEvent(new CustomEvent('barsa-memory-pressure',{detail:{level:" + pressure + "}}));", null);
+        });
     }
 
     @Override protected void onDestroy() {
@@ -251,7 +265,14 @@ public final class MainActivity extends Activity {
         unregisterBackNavigation();
         if (fileCallback != null) { fileCallback.onReceiveValue(null); fileCallback=null; }
         if (nativeBridge != null) nativeBridge.cancelAllExports();
-        if (webView != null) { webView.removeJavascriptInterface("BarsaAndroid"); webView.destroy(); }
+        WebView stale = webView;
+        webView = null;
+        webViewGeneration++;
+        if (stale != null) {
+            try { ViewCompat.setOnApplyWindowInsetsListener(stale, null); } catch (Exception ignored) {}
+            try { stale.removeJavascriptInterface("BarsaAndroid"); } catch (Exception ignored) {}
+            try { stale.destroy(); } catch (Exception ignored) {}
+        }
         if (assetServer != null) try { assetServer.close(); } catch (Exception ignored) {}
         if (nativeAi != null) try { nativeAi.close(); } catch (Exception ignored) {}
         super.onDestroy();
