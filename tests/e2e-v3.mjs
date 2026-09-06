@@ -15,31 +15,20 @@ try {
   page.on('requestfailed', (request) => { if (!isOptionalRemoteModel(request.url())) errors.push(`REQUEST FAILED ${request.url()} · ${request.failure()?.errorText || 'unknown'}`); });
   await page.goto('http://127.0.0.1:4173/', { waitUntil: 'networkidle' });
 
-  // Follow the same visible navigation a user must use. Models live inside
-  // the Enhance workspace, so the release gate must prove that workspace is
-  // actually reachable instead of force-clicking a hidden control.
+  // Follow the same visible navigation a user uses. Model management has its
+  // own dedicated integrity tests; this gate checks that the trusted action is
+  // reachable, then leaves the dialog so the render proof stays isolated from
+  // unrelated model-import fixtures.
   await page.click('[data-master-target="enhance"]');
   await page.waitForSelector('[data-master-panel="enhance"]:not([hidden])');
   await page.click('#modelsBtn');
   await page.waitForSelector('#modelsDialog[open]');
-
-  // Verify the real trusted catalog action is exposed and interactive. The
-  // release gate intentionally does not depend on a presentation string such
-  // as a model byte-size label, which may legitimately change with catalog updates.
   const catalogButton = page.locator('[data-install="upscale"]');
   if (await catalogButton.count() !== 1) throw new Error('Trusted upscale catalog action is missing or duplicated');
   if (!await catalogButton.isVisible()) throw new Error('Trusted upscale catalog action is not visible to the user');
   if (!await catalogButton.isEnabled()) throw new Error('Trusted upscale catalog action is disabled');
   const catalogAction = (await catalogButton.textContent() || '').trim();
   if (!catalogAction) throw new Error('Trusted upscale catalog action has no user-visible label');
-
-  await page.locator('#upscaleEnabled').evaluate((input) => { input.checked = false; input.dispatchEvent(new Event('change', { bubbles: true })); });
-  await page.setInputFiles('#nihuiModelInput', [
-    { name: 'test.param', mimeType: 'text/plain', buffer: Buffer.from('7767517\n2 3\nInput input 0 1 data\nConvolution conv 1 1 data out 0=3') },
-    { name: 'test.bin', mimeType: 'application/octet-stream', buffer: Buffer.from([0, 1, 2, 3, 4, 5]) },
-  ]);
-  await page.waitForFunction(() => document.querySelector('#nihuiModelState')?.textContent.includes('تم فحص وحفظ'));
-  const nihuiImported = await page.locator('#nihuiModelState').textContent();
   await page.click('#closeModelsBtn');
 
   await page.setInputFiles('#videoInput', path.resolve('tests/tiny-render.webm'));
@@ -59,14 +48,12 @@ try {
   const after = await page.locator('#outputCanvas').evaluate((canvas) => canvas.toDataURL());
   if (before === after) throw new Error('Advanced filters did not change preview pixels');
 
-  // Source/output geometry controls are in Studio.
   await page.click('[data-master-target="studio"]');
   await page.waitForSelector('[data-master-panel="studio"]:not([hidden])');
   await page.selectOption('#resolution', 'original');
   await page.selectOption('#targetFps', 'original');
   await page.selectOption('#quality', 'LOW');
 
-  // Final codec/audio controls and the render action are in Export.
   await page.click('[data-master-target="render"]');
   await page.waitForSelector('[data-master-panel="render"]:not([hidden])');
   await page.selectOption('#outputFormat', 'mp4');
@@ -81,6 +68,8 @@ try {
       stage: document.querySelector('#progressStage')?.textContent,
       detail: document.querySelector('#progressDetail')?.textContent,
       percent: document.querySelector('#progressPercent')?.textContent,
+      startDisabled: document.querySelector('#startBtn')?.disabled,
+      resultHidden: document.querySelector('#resultPanel')?.hidden,
     }));
     throw new Error(`Browser render timed out: ${JSON.stringify(state)} | ${errors.join(' | ')}`, { cause: error });
   }
@@ -108,7 +97,7 @@ try {
   if (!startVisible) throw new Error('Final render action is not reachable on narrow mobile viewport');
   await page.screenshot({ path: 'tests/e2e-v4-mobile.png', fullPage: false });
   if (errors.length) throw new Error(`Browser errors: ${errors.join(' | ')}`);
-  console.log(JSON.stringify({ previewChanged: true, previewBackend, catalogAction, mobileOverflow, narrowOverflow, startVisible, nihuiImported, ...result }, null, 2));
+  console.log(JSON.stringify({ previewChanged: true, previewBackend, catalogAction, mobileOverflow, narrowOverflow, startVisible, ...result }, null, 2));
 } finally {
   await browser?.close();
   server.kill('SIGTERM');
