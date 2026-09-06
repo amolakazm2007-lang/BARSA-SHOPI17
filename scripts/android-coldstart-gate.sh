@@ -166,7 +166,7 @@ for PASS in 1 2 3; do
   printf 'LAUNCH_%s_PID=%s\n' "$PASS" "$PID" | tee "reports/android-launch-${PASS}-pid.txt"
 
   timeout 10s adb shell dumpsys activity activities > "reports/android-activities-${PASS}.txt" 2>&1 || true
-  if ! grep -q "mResumedActivity.*${PACKAGE}" "reports/android-activities-${PASS}.txt"; then
+  if ! grep -Eq "(topResumedActivity=|ResumedActivity:|mResumedActivity=).*${PACKAGE}/\.MainActivity" "reports/android-activities-${PASS}.txt"; then
     capture_diagnostics "LAUNCH_${PASS}_NOT_RESUMED"
     echo "BARSA process exists but MainActivity is not resumed during pass $PASS" >&2
     exit 1
