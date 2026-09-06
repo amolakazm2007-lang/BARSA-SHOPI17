@@ -1,4 +1,9 @@
+import { BarsaError, withHardTimeout } from './CrashProofRuntime.js';
+import { PeriodicResumeVerifier } from './PeriodicResumeVerifier.js';
+
 const DEFAULT_MAX_QUEUE = 4;
+const SUPPORT_TIMEOUT_MS = 5000;
+const FLUSH_TIMEOUT_MS = 15000;
 
 export class WebCodecsEngine extends EventTarget {
   constructor({ maxQueueSize = DEFAULT_MAX_QUEUE } = {}) {
@@ -11,7 +16,6 @@ export class WebCodecsEngine extends EventTarget {
     this.closed = false;
   }
 
-
   setMaxQueueSize(value = DEFAULT_MAX_QUEUE) {
     this.maxQueueSize = Math.max(1, Math.min(8, Math.floor(Number(value) || DEFAULT_MAX_QUEUE)));
     return this.maxQueueSize;
@@ -19,74 +23,121 @@ export class WebCodecsEngine extends EventTarget {
 
   async createDecoder({ codecConfig, onFrame, onError = null }) {
     assertWebCodecs('VideoDecoder');
-    const support = await VideoDecoder.isConfigSupported(codecConfig);
-    if (!support.supported) throw new Error(`Decoder configuration is unsupported: ${codecConfig.codec}`);
+    let support;
+    try {
+      support = await withHardTimeout(() => VideoDecoder.isConfigSupported(codecConfig), { timeoutMs: SUPPORT_TIMEOUT_MS, label: 'VideoDecoder support probe' });
+    } catch (error) {
+      throw wrapCodecError('DECODER_PROBE_FAILED', 'Video decoder support probe failed', error);
+    }
+    if (!support.supported) throw new BarsaError('DECODER_UNSUPPORTED', `Decoder configuration is unsupported: ${codecConfig.codec}`, { recoverable: true });
     this.decoder?.close();
     this.decoder = new VideoDecoder({
       output: (frame) => {
         Promise.resolve(onFrame(frame)).catch((error) => {
           frame.close();
-          onError?.(error);
+          const wrapped = wrapCodecError('DECODER_OUTPUT_FAILED', 'Decoded frame callback failed', error);
+          console.error('[BARSA][WebCodecs][decoder-output-failed]', wrapped);
+          onError?.(wrapped);
         });
       },
-      error: (error) => onError?.(error),
+      error: (error) => {
+        const wrapped = wrapCodecError('DECODER_FAILED', 'Video decoder failed', error);
+        console.error('[BARSA][WebCodecs][decoder-failed]', wrapped);
+        onError?.(wrapped);
+      },
     });
     this.decoder.configure(support.config || codecConfig);
     return this.decoder;
   }
 
   async decodeChunks(chunks, { signal = null } = {}) {
-    if (!this.decoder || this.decoder.state !== 'configured') throw new Error('Decoder is not configured');
-    for await (const chunk of chunks) {
-      abortIfNeeded(signal);
-      while (this.decoder.decodeQueueSize >= this.maxQueueSize) await waitForQueue(this.decoder, signal);
-      this.decoder.decode(chunk);
+    if (!this.decoder || this.decoder.state !== 'configured') throw new BarsaError('DECODER_NOT_CONFIGURED', 'Decoder is not configured', { recoverable: true });
+    try {
+      for await (const chunk of chunks) {
+        abortIfNeeded(signal);
+        while (this.decoder.decodeQueueSize >= this.maxQueueSize) await waitForQueue(this.decoder, signal);
+        this.decoder.decode(chunk);
+      }
+      await withHardTimeout(() => this.decoder.flush(), {
+        timeoutMs: FLUSH_TIMEOUT_MS,
+        label: 'VideoDecoder flush',
+        signal,
+        onTimeout: () => safeCloseCodec(this, 'decoder'),
+      });
+    } catch (error) {
+      throw error instanceof BarsaError ? error : wrapCodecError('DECODER_FAILED', 'Video decoding failed', error);
     }
-    await this.decoder.flush();
   }
 
   async createEncoder({ config, onChunk, onError = null }) {
     assertWebCodecs('VideoEncoder');
     const normalized = normalizeEncoderConfig(config);
-    const support = await VideoEncoder.isConfigSupported(normalized);
-    if (!support.supported) throw new Error(`Encoder configuration is unsupported: ${normalized.codec}`);
+    let support;
+    try {
+      support = await withHardTimeout(() => VideoEncoder.isConfigSupported(normalized), { timeoutMs: SUPPORT_TIMEOUT_MS, label: 'VideoEncoder support probe' });
+    } catch (error) {
+      throw wrapCodecError('ENCODER_PROBE_FAILED', 'Video encoder support probe failed', error);
+    }
+    if (!support.supported) throw new BarsaError('ENCODER_UNSUPPORTED', `Encoder configuration is unsupported: ${normalized.codec}`, { recoverable: true });
     this.encoder?.close();
     this.encoder = new VideoEncoder({
       output: (chunk, metadata) => onChunk(chunk, metadata),
-      error: (error) => onError?.(error),
+      error: (error) => {
+        const wrapped = wrapCodecError('ENCODER_FAILED', 'Video encoder failed', error);
+        console.error('[BARSA][WebCodecs][encoder-failed]', wrapped);
+        onError?.(wrapped);
+      },
     });
     this.encoder.configure(support.config || normalized);
     return this.encoder;
   }
 
   async encode(frame, { keyFrame = false, signal = null, closeFrame = true } = {}) {
-    if (!this.encoder || this.encoder.state !== 'configured') throw new Error('Encoder is not configured');
+    if (!this.encoder || this.encoder.state !== 'configured') throw new BarsaError('ENCODER_NOT_CONFIGURED', 'Encoder is not configured', { recoverable: true });
     abortIfNeeded(signal);
     try {
       while (this.encoder.encodeQueueSize >= this.maxQueueSize) await waitForQueue(this.encoder, signal);
       this.encoder.encode(frame, { keyFrame });
+    } catch (error) {
+      throw wrapCodecError('ENCODER_FAILED', 'Video encode operation failed', error);
     } finally {
       if (closeFrame) frame.close();
     }
   }
 
-  async flushEncoder() {
-    if (this.encoder?.state === 'configured') await this.encoder.flush();
+  async flushEncoder({ signal = null } = {}) {
+    if (this.encoder?.state !== 'configured') return;
+    try {
+      await withHardTimeout(() => this.encoder.flush(), {
+        timeoutMs: FLUSH_TIMEOUT_MS,
+        label: 'VideoEncoder flush',
+        signal,
+        onTimeout: () => safeCloseCodec(this, 'encoder'),
+      });
+    } catch (error) {
+      throw error instanceof BarsaError ? error : wrapCodecError('ENCODER_FLUSH_FAILED', 'Video encoder flush failed', error);
+    }
   }
 
   async createAudioDecoder({ codecConfig, onData, onError = null }) {
     assertWebCodecs('AudioDecoder');
-    const support = await AudioDecoder.isConfigSupported(codecConfig);
-    if (!support.supported) throw new Error(`Audio decoder configuration is unsupported: ${codecConfig.codec}`);
+    const support = await withHardTimeout(() => AudioDecoder.isConfigSupported(codecConfig), { timeoutMs: SUPPORT_TIMEOUT_MS, label: 'AudioDecoder support probe' });
+    if (!support.supported) throw new BarsaError('AUDIO_DECODER_UNSUPPORTED', `Audio decoder configuration is unsupported: ${codecConfig.codec}`, { recoverable: true });
     this.audioDecoder?.close();
     this.audioDecoder = new AudioDecoder({
       output: (data) => {
         Promise.resolve(onData(data)).catch((error) => {
           data.close();
-          onError?.(error);
+          const wrapped = wrapCodecError('AUDIO_DECODER_OUTPUT_FAILED', 'Decoded audio callback failed', error);
+          console.error('[BARSA][WebCodecs][audio-decoder-output-failed]', wrapped);
+          onError?.(wrapped);
         });
       },
-      error: (error) => onError?.(error),
+      error: (error) => {
+        const wrapped = wrapCodecError('AUDIO_DECODER_FAILED', 'Audio decoder failed', error);
+        console.error('[BARSA][WebCodecs][audio-decoder-failed]', wrapped);
+        onError?.(wrapped);
+      },
     });
     this.audioDecoder.configure(support.config || codecConfig);
     return this.audioDecoder;
@@ -94,12 +145,16 @@ export class WebCodecsEngine extends EventTarget {
 
   async createAudioEncoder({ config, onChunk, onError = null }) {
     assertWebCodecs('AudioEncoder');
-    const support = await AudioEncoder.isConfigSupported(config);
-    if (!support.supported) throw new Error(`Audio encoder configuration is unsupported: ${config.codec}`);
+    const support = await withHardTimeout(() => AudioEncoder.isConfigSupported(config), { timeoutMs: SUPPORT_TIMEOUT_MS, label: 'AudioEncoder support probe' });
+    if (!support.supported) throw new BarsaError('AUDIO_ENCODER_UNSUPPORTED', `Audio encoder configuration is unsupported: ${config.codec}`, { recoverable: true });
     this.audioEncoder?.close();
     this.audioEncoder = new AudioEncoder({
       output: (chunk, metadata) => onChunk(chunk, metadata),
-      error: (error) => onError?.(error),
+      error: (error) => {
+        const wrapped = wrapCodecError('AUDIO_ENCODER_FAILED', 'Audio encoder failed', error);
+        console.error('[BARSA][WebCodecs][audio-encoder-failed]', wrapped);
+        onError?.(wrapped);
+      },
     });
     this.audioEncoder.configure(support.config || config);
     return this.audioEncoder;
@@ -107,7 +162,8 @@ export class WebCodecsEngine extends EventTarget {
 
   close() {
     for (const codec of [this.decoder, this.encoder, this.audioDecoder, this.audioEncoder]) {
-      if (codec && codec.state !== 'closed') codec.close();
+      try { if (codec && codec.state !== 'closed') codec.close(); }
+      catch (error) { console.warn('[BARSA][WebCodecs][close-failed]', error); }
     }
     this.decoder = null;
     this.encoder = null;
@@ -118,7 +174,7 @@ export class WebCodecsEngine extends EventTarget {
 }
 
 export class ElementaryVideoWriter {
-  constructor({ storage, sessionId, codec, width, height, fps, expectedFrames = 0, checkpointEvery = 30 }) {
+  constructor({ storage, sessionId, codec, width, height, fps, expectedFrames = 0, checkpointEvery = 30, logger = console }) {
     this.storage = storage;
     this.sessionId = sessionId;
     this.codec = codec;
@@ -134,6 +190,8 @@ export class ElementaryVideoWriter {
     this.progressUpdateChain = Promise.resolve();
     this.pendingProgress = null;
     this.resumeMetadata = new Map();
+    this.logger = logger;
+    this.resumeVerifier = new PeriodicResumeVerifier({ storage, sessionId, logger });
     this.format = codec.startsWith('vp09') ? 'ivf-vp9' : codec.startsWith('av01') ? 'ivf-av1' : 'annexb-h264';
   }
 
@@ -155,12 +213,7 @@ export class ElementaryVideoWriter {
     });
     if (this.format.startsWith('ivf')) {
       const fourCC = this.format === 'ivf-vp9' ? 'VP90' : 'AV01';
-      await this.storage.appendFrame(
-        this.sessionId,
-        createIVFHeader(this.width, this.height, this.fps, this.expectedFrames, fourCC),
-        0,
-        Number.MAX_SAFE_INTEGER,
-      );
+      await this.storage.appendFrame(this.sessionId, createIVFHeader(this.width, this.height, this.fps, this.expectedFrames, fourCC), 0, Number.MAX_SAFE_INTEGER);
     }
   }
 
@@ -176,18 +229,11 @@ export class ElementaryVideoWriter {
     }
     const nextFrameNumber = this.frameIndex + 1;
     const checkpointPatch = this.resumeMetadata.get(nextFrameNumber) || null;
-    const durability = await this.storage.appendFrame(
-      this.sessionId,
-      bytes,
-      this.frameIndex,
-      this.checkpointEvery,
-      checkpointPatch,
-    );
+    const durability = await this.storage.appendFrame(this.sessionId, bytes, this.frameIndex, this.checkpointEvery, checkpointPatch);
     this.frameIndex = nextFrameNumber;
     if (durability?.durable) {
-      for (const key of this.resumeMetadata.keys()) {
-        if (key <= this.frameIndex) this.resumeMetadata.delete(key);
-      }
+      for (const key of this.resumeMetadata.keys()) if (key <= this.frameIndex) this.resumeMetadata.delete(key);
+      await this.resumeVerifier.verify(this.frameIndex);
     }
     this.dispatchProgress(chunk);
   }
@@ -196,40 +242,35 @@ export class ElementaryVideoWriter {
     const index = Math.max(1, Number(frameNumber) || 1);
     this.resumeMetadata.set(index, { ...(metadata || {}), encodedFrames: index });
     const floor = Math.max(0, index - Math.max(4, this.checkpointEvery * 2));
-    for (const key of this.resumeMetadata.keys()) {
-      if (key < floor) this.resumeMetadata.delete(key);
-    }
+    for (const key of this.resumeMetadata.keys()) if (key < floor) this.resumeMetadata.delete(key);
   }
 
   dispatchProgress(chunk, { force = false } = {}) {
     const progress = this.expectedFrames ? Math.min(1, this.frameIndex / this.expectedFrames) : null;
-    this.pendingProgress = {
-      liveEncodedFrames: this.frameIndex,
-      progress,
-      stage: 'encoding',
-      lastTimestamp: chunk.timestamp,
-    };
+    this.pendingProgress = { liveEncodedFrames: this.frameIndex, progress, stage: 'encoding', lastTimestamp: chunk.timestamp };
     const now = typeof performance !== 'undefined' && performance.now ? performance.now() : Date.now();
     if (!force && (!this.expectedFrames || this.frameIndex < this.expectedFrames) && now - this.lastProgressCommitAt < this.progressCommitIntervalMs) return;
     this.lastProgressCommitAt = now;
     const patch = this.pendingProgress;
     this.pendingProgress = null;
+    this._queueProgressUpdate(patch);
+  }
+
+  _queueProgressUpdate(patch) {
     this.progressUpdateChain = this.progressUpdateChain
-      .catch(() => {})
+      .catch((error) => { this.logger.warn?.('[BARSA][writer][previous-progress-update-failed]', error); })
       .then(() => this.storage.updateSession(this.sessionId, patch))
-      .catch(() => {});
+      .catch((error) => { this.logger.warn?.('[BARSA][writer][progress-update-failed]', error); });
   }
 
   async _flushProgress() {
     if (this.pendingProgress) {
       const patch = this.pendingProgress;
       this.pendingProgress = null;
-      this.progressUpdateChain = this.progressUpdateChain
-        .catch(() => {})
-        .then(() => this.storage.updateSession(this.sessionId, patch))
-        .catch(() => {});
+      this._queueProgressUpdate(patch);
     }
-    await this.progressUpdateChain.catch(() => {});
+    try { await this.progressUpdateChain; }
+    catch (error) { this.logger.warn?.('[BARSA][writer][progress-flush-failed]', error); }
   }
 
   async finalize({ remuxPending = true, patch = null } = {}) {
@@ -241,7 +282,8 @@ export class ElementaryVideoWriter {
 
   async abort(reason) {
     this.pendingProgress = null;
-    await this.progressUpdateChain.catch(() => {});
+    try { await this.progressUpdateChain; }
+    catch (error) { this.logger.warn?.('[BARSA][writer][abort-progress-drain-failed]', error); }
     return this.storage.abortSession(this.sessionId, reason?.message || String(reason || 'cancelled'));
   }
 }
@@ -256,18 +298,12 @@ export async function getSupportedCodecs(width = 1920, height = 1080, framerate 
   return Promise.all(candidates.map(async (candidate) => {
     try {
       const [decode, encode] = await Promise.all([
-        VideoDecoder.isConfigSupported({ codec: candidate.codec, codedWidth: width, codedHeight: height }),
-        VideoEncoder.isConfigSupported({
-          codec: candidate.codec,
-          width,
-          height,
-          bitrate: Math.max(1_000_000, width * height * framerate * 0.08),
-          framerate,
-          hardwareAcceleration: 'prefer-hardware',
-        }),
+        withHardTimeout(() => VideoDecoder.isConfigSupported({ codec: candidate.codec, codedWidth: width, codedHeight: height }), { timeoutMs: SUPPORT_TIMEOUT_MS, label: `${candidate.name} decode probe` }),
+        withHardTimeout(() => VideoEncoder.isConfigSupported({ codec: candidate.codec, width, height, bitrate: Math.max(1_000_000, width * height * framerate * 0.08), framerate, hardwareAcceleration: 'prefer-hardware' }), { timeoutMs: SUPPORT_TIMEOUT_MS, label: `${candidate.name} encode probe` }),
       ]);
       return { ...candidate, decode: !!decode.supported, encode: !!encode.supported };
-    } catch {
+    } catch (error) {
+      console.warn('[BARSA][WebCodecs][codec-probe-failed]', candidate, error);
       return { ...candidate, decode: false, encode: false };
     }
   }));
@@ -279,36 +315,25 @@ export async function chooseEncoderConfig({ width, height, framerate, bitrate, p
     vp9: [{ codec: width * height <= 1280 * 720 ? 'vp09.00.10.08' : 'vp09.00.40.08' }, { codec: 'vp09.00.50.08' }],
     av1: [{ codec: width * height <= 1280 * 720 ? 'av01.0.04M.08' : 'av01.0.08M.08' }],
   };
-  const accelerationOrder = acceleration === 'hardware'
-    ? ['prefer-hardware', 'no-preference']
-    : acceleration === 'software'
-      ? ['prefer-software', 'no-preference']
-      : ['prefer-hardware', 'no-preference', 'prefer-software'];
+  const accelerationOrder = acceleration === 'hardware' ? ['prefer-hardware', 'no-preference'] : acceleration === 'software' ? ['prefer-software', 'no-preference'] : ['prefer-hardware', 'no-preference', 'prefer-software'];
   for (const name of preferred) {
     for (const profile of codecs[name] || []) for (const hardwareAcceleration of accelerationOrder) for (const rateControl of [{ bitrateMode: 'variable' }, {}]) {
       const candidate = normalizeEncoderConfig({ ...profile, ...rateControl, width, height, framerate, bitrate, hardwareAcceleration, latencyMode: 'quality', alpha: 'discard' });
-      try { const support = await VideoEncoder.isConfigSupported(candidate); if (support.supported) return support.config || candidate; } catch {}
+      try {
+        const support = await withHardTimeout(() => VideoEncoder.isConfigSupported(candidate), { timeoutMs: SUPPORT_TIMEOUT_MS, label: `VideoEncoder probe ${candidate.codec}` });
+        if (support.supported) return support.config || candidate;
+      } catch (error) {
+        console.warn('[BARSA][WebCodecs][encoder-candidate-failed]', { codec: candidate.codec, hardwareAcceleration, error });
+      }
     }
   }
-  throw new Error('No requested WebCodecs video encoder is supported on this device');
+  throw new BarsaError('ENCODER_UNSUPPORTED', 'No requested WebCodecs video encoder is supported on this device', { recoverable: true });
 }
 
-/**
- * Returns AVC profile-level identifiers sized for the requested workload.
- * Using a 1080p level for 4K is rejected by several Android hardware codecs.
- */
 export function getH264CodecCandidates(width, height, framerate = 30) {
   const pixels = width * height;
-  if (pixels > 4096 * 2304) {
-    return framerate > 30
-      ? ['avc1.64003d', 'avc1.64003e', 'avc1.64003c']
-      : ['avc1.64003c', 'avc1.64003d', 'avc1.64003e'];
-  }
-  if (pixels > 1920 * 1080) {
-    return framerate > 30
-      ? ['avc1.640034', 'avc1.640033', 'avc1.4d0034']
-      : ['avc1.640033', 'avc1.4d0033', 'avc1.640034'];
-  }
+  if (pixels > 4096 * 2304) return framerate > 30 ? ['avc1.64003d', 'avc1.64003e', 'avc1.64003c'] : ['avc1.64003c', 'avc1.64003d', 'avc1.64003e'];
+  if (pixels > 1920 * 1080) return framerate > 30 ? ['avc1.640034', 'avc1.640033', 'avc1.4d0034'] : ['avc1.640033', 'avc1.4d0033', 'avc1.640034'];
   if (pixels > 1280 * 720 || framerate > 30) return ['avc1.64002a', 'avc1.4d002a', 'avc1.640028'];
   return ['avc1.42001f', 'avc1.4d001f', 'avc1.64001f'];
 }
@@ -322,18 +347,7 @@ export function getH264ProbeConfigurations() {
 }
 
 function probeConfig(width, height, framerate, bitrate) {
-  return {
-    codec: getH264CodecCandidates(width, height, framerate)[0],
-    width,
-    height,
-    framerate,
-    bitrate,
-    bitrateMode: 'variable',
-    hardwareAcceleration: 'prefer-hardware',
-    latencyMode: 'quality',
-    alpha: 'discard',
-    avc: { format: 'annexb' },
-  };
+  return { codec: getH264CodecCandidates(width, height, framerate)[0], width, height, framerate, bitrate, bitrateMode: 'variable', hardwareAcceleration: 'prefer-hardware', latencyMode: 'quality', alpha: 'discard', avc: { format: 'annexb' } };
 }
 
 function normalizeEncoderConfig(config) {
@@ -342,30 +356,18 @@ function normalizeEncoderConfig(config) {
   return { ...config, width, height, framerate: Math.max(1, config.framerate || 30) };
 }
 
-function assertWebCodecs(name) {
-  if (!(name in globalThis)) throw new Error(`${name} is unavailable in this browser`);
-}
-
-function abortIfNeeded(signal) {
-  if (signal?.aborted) throw signal.reason || new DOMException('Operation cancelled', 'AbortError');
-}
+function assertWebCodecs(name) { if (!(name in globalThis)) throw new BarsaError('WEBCODECS_UNAVAILABLE', `${name} is unavailable in this browser`, { recoverable: true, details: { name } }); }
+function abortIfNeeded(signal) { if (signal?.aborted) throw signal.reason || new DOMException('Operation cancelled', 'AbortError'); }
+function safeCloseCodec(owner, key) { try { owner[key]?.close?.(); } catch (error) { console.warn(`[BARSA][WebCodecs][${key}-timeout-close-failed]`, error); } finally { owner[key] = null; } }
+function wrapCodecError(code, prefix, error) { return error instanceof BarsaError ? error : new BarsaError(code, `${prefix}: ${error?.message || error}`, { recoverable: true, cause: error }); }
 
 async function waitForQueue(codec, signal) {
   abortIfNeeded(signal);
   await new Promise((resolve, reject) => {
     let settled = false;
-    const finish = (fn, value) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      codec?.removeEventListener?.('dequeue', onDequeue);
-      signal?.removeEventListener?.('abort', onAbort);
-      fn(value);
-    };
+    const finish = (fn, value) => { if (settled) return; settled = true; clearTimeout(timer); codec?.removeEventListener?.('dequeue', onDequeue); signal?.removeEventListener?.('abort', onAbort); fn(value); };
     const onDequeue = () => finish(resolve);
     const onAbort = () => finish(reject, signal.reason || new DOMException('Operation cancelled', 'AbortError'));
-    // WebCodecs emits `dequeue` when queued work is consumed. The short timer
-    // is a compatibility fallback for implementations that do not emit it reliably.
     const timer = setTimeout(() => finish(resolve), 16);
     codec?.addEventListener?.('dequeue', onDequeue, { once: true });
     signal?.addEventListener?.('abort', onAbort, { once: true });
@@ -373,33 +375,7 @@ async function waitForQueue(codec, signal) {
 }
 
 function createIVFHeader(width, height, fps, frameCount, fourCC) {
-  const bytes = new Uint8Array(32);
-  const view = new DataView(bytes.buffer);
-  bytes.set([68, 75, 73, 70], 0);
-  view.setUint16(4, 0, true);
-  view.setUint16(6, 32, true);
-  bytes.set([...fourCC].map((char) => char.charCodeAt(0)), 8);
-  view.setUint16(12, width, true);
-  view.setUint16(14, height, true);
-  view.setUint32(16, Math.round(fps * 1000), true);
-  view.setUint32(20, 1000, true);
-  view.setUint32(24, frameCount >>> 0, true);
-  view.setUint32(28, 0, true);
-  return bytes;
+  const bytes = new Uint8Array(32); const view = new DataView(bytes.buffer); bytes.set([68, 75, 73, 70], 0); view.setUint16(4, 0, true); view.setUint16(6, 32, true); bytes.set([...fourCC].map((char) => char.charCodeAt(0)), 8); view.setUint16(12, width, true); view.setUint16(14, height, true); view.setUint32(16, Math.round(fps * 1000), true); view.setUint32(20, 1000, true); view.setUint32(24, frameCount >>> 0, true); view.setUint32(28, 0, true); return bytes;
 }
-
-function createIVFFrameHeader(length, timestamp) {
-  const bytes = new Uint8Array(12);
-  const view = new DataView(bytes.buffer);
-  view.setUint32(0, length, true);
-  view.setUint32(4, timestamp >>> 0, true);
-  view.setUint32(8, Math.floor(timestamp / 0x100000000), true);
-  return bytes;
-}
-
-function concat(a, b) {
-  const output = new Uint8Array(a.length + b.length);
-  output.set(a, 0);
-  output.set(b, a.length);
-  return output;
-}
+function createIVFFrameHeader(length, timestamp) { const bytes = new Uint8Array(12); const view = new DataView(bytes.buffer); view.setUint32(0, length, true); view.setUint32(4, timestamp >>> 0, true); view.setUint32(8, Math.floor(timestamp / 0x100000000), true); return bytes; }
+function concat(a, b) { const output = new Uint8Array(a.length + b.length); output.set(a, 0); output.set(b, a.length); return output; }
