@@ -35,6 +35,7 @@ jobs:
           node scripts/apply-p0-output-lease-fixes.mjs
           node scripts/apply-doctor-control-plane.mjs
           node scripts/apply-webcodecs-queue-watchdog.mjs
+          node scripts/apply-ort-session-recovery.mjs
       - name: Update vulnerable build and browser dependencies safely
         run: npm install --save-dev --save-exact vite@6.4.3 playwright@1.63.0 --package-lock-only
       - name: Persist deterministic integration updates safely
@@ -56,6 +57,7 @@ jobs:
             node scripts/apply-p0-output-lease-fixes.mjs
             node scripts/apply-doctor-control-plane.mjs
             node scripts/apply-webcodecs-queue-watchdog.mjs
+            node scripts/apply-ort-session-recovery.mjs
             npm install --save-dev --save-exact vite@6.4.3 playwright@1.63.0 --package-lock-only
 
             if git diff --quiet; then
