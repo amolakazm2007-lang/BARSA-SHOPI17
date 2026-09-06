@@ -48,8 +48,8 @@ patchFile('src/engine/VideoPipeline.js', [
   },
   {
     label: 'remove duplicate processed frame declaration after ownership scope',
-    from: '        frameIntegrity.observeDecoded(timestamp, sourceDuration);\n        let processedFrame;',
-    to: '        frameIntegrity.observeDecoded(timestamp, sourceDuration);',
+    from: '        frameIntegrity.observeDecoded(timestamp, sourceDuration);\n        let processedFrame;\n\n        // Re-sample once per source second.',
+    to: '        frameIntegrity.observeDecoded(timestamp, sourceDuration);\n\n        // Re-sample once per source second.',
   },
   {
     label: 'GPU cleanup keeps source ownership in pipeline finally',
