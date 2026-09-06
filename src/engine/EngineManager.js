@@ -27,6 +27,7 @@ import { TemporalReconstructionEngine } from './TemporalReconstructionEngine.js'
 import { RenderResilienceEngine } from './RenderResilienceEngine.js';
 import { DynamicRenderFabric } from './DynamicRenderFabric.js';
 import { BarsaDoctor } from './BarsaDoctor.js';
+import { DoctorControlPlane } from './DoctorControlPlane.js';
 import { DevicePerformancePassport } from './DevicePerformancePassport.js';
 import { MemoryGovernor } from './MemoryGovernor.js';
 import { StorageGovernor } from './StorageGovernor.js';
@@ -82,6 +83,12 @@ export class EngineManager extends EventTarget {
       memoryGovernor: this.memoryGovernor,
       performance: this.engines.performance,
       storageGovernor: this.storageGovernor,
+    });
+    this.doctorControlPlane = new DoctorControlPlane({
+      runtimeGuard: this.runtimeGuard,
+      performance: this.engines.performance,
+      storage: this.engines.storage,
+      passport: this.performancePassport,
     });
     this.jobs = new Map();
     this.activeJobId = null;
@@ -217,7 +224,8 @@ export class EngineManager extends EventTarget {
 
     const workloadMB = estimateJobWorkloadMB(job.options);
     const heavyAi = hasHeavyAi(job.options);
-    const runtimeDecision = this.runtimeGuard.evaluate({ capabilities: this.capabilities || {}, workloadMB, heavyAi });
+    const doctorDecision = this.doctorControlPlane.assessRuntime({ capabilities: this.capabilities || {}, workloadMB, heavyAi, jobId });
+    const runtimeDecision = doctorDecision.runtimeDecision;
     const resourceScope = new ResourceScope(`job:${jobId}`);
     let resourcesClosed = false;
     const context = {
@@ -226,6 +234,8 @@ export class EngineManager extends EventTarget {
       capabilities: this.capabilities,
       runtimeGuard: this.runtimeGuard,
       runtimeDecision,
+      doctorDecision,
+      doctorControlPlane: this.doctorControlPlane,
       resources: resourceScope,
       trackResource: (resource) => resourceScope.track(resource),
       releaseResource: (resource) => resourceScope.release(resource),
