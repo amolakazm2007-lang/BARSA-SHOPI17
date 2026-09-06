@@ -684,7 +684,6 @@ export class VideoPipeline {
         const timestamp = Math.max(0, sourceFrame.timestamp - sourceTimestampOrigin);
         const sourceDuration = sourceFrame.duration || Math.round(1_000_000 / sourceFps);
         frameIntegrity.observeDecoded(timestamp, sourceDuration);
-        let processedFrame;
 
         // Re-sample once per source second. The small surface keeps analysis
         // bounded while still adapting cleanup/detail strength between scenes.
