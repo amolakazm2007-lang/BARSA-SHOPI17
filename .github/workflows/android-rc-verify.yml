@@ -90,6 +90,17 @@ jobs:
           npm run build 2>&1 | tee reports/web-build.log
           node scripts/sync-android.mjs 2>&1 | tee reports/android-sync.log
 
+      - name: Reject diagnostic source maps from packaged Android assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          MAP_FILE="$(find android/app/src/main/assets -type f -name '*.map' -print -quit)"
+          if [[ -n "$MAP_FILE" ]]; then
+            echo "FAIL: production Android assets contain source map: $MAP_FILE" >&2
+            exit 1
+          fi
+          echo 'PASS: no source maps packaged in Android assets' | tee reports/android-no-sourcemaps.txt
+
       - name: Android lint unit and assembly gates
         shell: bash
         run: |
@@ -127,6 +138,7 @@ jobs:
           test -f reports/android-script-entered.txt
           test -f reports/android-apk-installed.txt
           test -f reports/android-boot-id.txt
+          test -f reports/android-no-sourcemaps.txt
           for PASS in 1 2 3; do
             test -f "reports/android-launch-${PASS}-pid.txt"
             test -f "reports/android-launch-${PASS}-boot-id.txt"
