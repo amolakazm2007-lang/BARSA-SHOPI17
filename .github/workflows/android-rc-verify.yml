@@ -11,6 +11,7 @@ on:
       - 'tests/**'
       - 'package.json'
       - 'package-lock.json'
+      - 'vite.config.js'
       - '.github/workflows/android-rc-verify.yml'
 
 permissions:
