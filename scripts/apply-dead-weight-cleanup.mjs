@@ -6,9 +6,12 @@ const files = {
   main: new URL('../src/main.js', import.meta.url),
   html: new URL('../index.html', import.meta.url),
   nihui: new URL('../src/engine/NihuiModelBridge.js', import.meta.url),
+  nihuiTest: new URL('../tests/NihuiModelBridge.test.mjs', import.meta.url),
+  qualityMetrics: new URL('../src/engine/QualityMetricsEngine.js', import.meta.url),
+  qualityMetricsTest: new URL('../tests/QualityMetrics.test.mjs', import.meta.url),
 };
 
-function removeRequired(source, needle, label) {
+function removeRequired(source, needle) {
   if (!source.includes(needle)) return source;
   return source.replace(needle, '');
 }
@@ -19,7 +22,7 @@ function replaceRequired(source, from, to, label) {
   return source.replace(from, to);
 }
 
-function removeRegex(source, regex, label) {
+function removeRegex(source, regex) {
   if (!regex.test(source)) return source;
   return source.replace(regex, '');
 }
@@ -32,7 +35,7 @@ async function cleanupManager() {
     "import { FullDeviceTestEngine } from './FullDeviceTestEngine.js';\n",
     '      nihui: new NihuiModelBridge(),\n',
     '      qualityMetrics: new QualityMetricsEngine(),\n',
-  ]) source = removeRequired(source, line, line.trim());
+  ]) source = removeRequired(source, line);
 
   source = replaceRequired(
     source,
@@ -43,6 +46,13 @@ async function cleanupManager() {
 
   if (!source.includes('function createLazyDeviceTestHandle(manager)')) {
     source += `\n\nfunction createLazyDeviceTestHandle(manager) {\n  let instancePromise = null;\n  const load = () => {\n    if (!instancePromise) {\n      instancePromise = import('./FullDeviceTestEngine.js')\n        .then(({ FullDeviceTestEngine }) => new FullDeviceTestEngine(manager))\n        .catch((error) => {\n          instancePromise = null;\n          throw error;\n        });\n    }\n    return instancePromise;\n  };\n  return Object.freeze({\n    run: (...args) => load().then((engine) => engine.run(...args)),\n    __peek: () => instancePromise,\n  });\n}\n`;
+  }
+
+  if (/NihuiModelBridge|\bnihui\b/i.test(source)) {
+    throw new Error('Nihui still referenced by EngineManager after cleanup');
+  }
+  if (/QualityMetricsEngine|\bqualityMetrics\b/.test(source)) {
+    throw new Error('QualityMetrics still referenced by EngineManager after cleanup');
   }
 
   await writeFile(files.manager, source);
@@ -65,24 +75,27 @@ async function cleanupMain() {
   source = removeRegex(
     source,
     /byId\('nihuiImportBtn'\)\.addEventListener\('click',\(\)=>byId\('nihuiModelInput'\)\.click\(\)\);byId\('nihuiModelInput'\)\.addEventListener\('change',e=>importNihuiPack\(e\.target\.files\)\);/g,
-    'dead Nihui UI wiring',
   );
-  if (/nihui/i.test(source)) throw new Error('Nihui reference remains in src/main.js');
+  source = removeRegex(
+    source,
+    /const packs=await manager\.engines\.nihui\.listPacks\(\)\.catch\(\(\)=>\[\]\);if\(packs\.length\)byId\('nihuiModelState'\)\.textContent=`\$\{packs\.length\} حزمة NCNN محفوظة محلياً · تحتاج ONNX للتنفيذ الحالي`;/g,
+  );
+  if (/\bnihui\b/i.test(source)) throw new Error('Nihui reference remains in src/main.js');
   await writeFile(files.main, source);
 }
 
 async function cleanupHtml() {
   let source = await readFile(files.html, 'utf8');
-  source = removeRegex(source, /\s*<article class="nihui-card">[\s\S]*?<\/article>/g, 'Nihui model card');
-  source = removeRegex(source, /\s*<input id="nihuiModelInput"[^>]*>/g, 'Nihui hidden input');
-  if (/nihui/i.test(source)) throw new Error('Nihui reference remains in index.html');
+  source = removeRegex(source, /\s*<article class="nihui-card">[\s\S]*?<\/article>/g);
+  source = removeRegex(source, /\s*<input id="nihuiModelInput"[^>]*>/g);
+  if (/\bnihui\b/i.test(source)) throw new Error('Nihui reference remains in index.html');
   await writeFile(files.html, source);
 }
 
-async function removeNihuiBridge() {
+async function removeIfPresent(file) {
   try {
-    await access(files.nihui);
-    await rm(files.nihui);
+    await access(file);
+    await rm(file);
   } catch (error) {
     if (error?.code !== 'ENOENT') throw error;
   }
@@ -92,5 +105,10 @@ await cleanupManager();
 await cleanupPipeline();
 await cleanupMain();
 await cleanupHtml();
-await removeNihuiBridge();
-console.log('BARSA dead-weight cleanup applied: Nihui removed, render metrics off hot path, device test lazy-loaded');
+await Promise.all([
+  removeIfPresent(files.nihui),
+  removeIfPresent(files.nihuiTest),
+  removeIfPresent(files.qualityMetrics),
+  removeIfPresent(files.qualityMetricsTest),
+]);
+console.log('BARSA dead-weight cleanup applied: stored-only Nihui removed, diagnostic render metrics removed from production, device test kept module-lazy');
