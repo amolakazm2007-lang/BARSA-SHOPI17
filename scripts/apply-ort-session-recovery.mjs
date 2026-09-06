@@ -27,7 +27,7 @@ await patchFile('src/engine/FaceRestorationEngine.js', [
   {
     before: "        const output = await withHardTimeout(() => session.run(buildFaceFeeds(session, this.ort, signature, chw, strength)), { timeoutMs: 30000, label: `Face ORT inference ${modelId}`, signal, onTimeout: () => { session?.release?.(); this.sessions.delete(modelId); } });\n        const imageOutput = selectImageOutput(session, output, 3 * size * size);",
     after: `        const output = await runOrtInferenceWithRecovery({\n          modelId,\n          getSession: (id) => this._loadSession(id),\n          invalidateSession: (id, stuck) => this._invalidateSession(id, stuck),\n          run: (activeSession) => {\n            session = activeSession;\n            signature = resolveFaceSignature(activeSession, config);\n            return activeSession.run(buildFaceFeeds(activeSession, this.ort, signature, chw, strength));\n          },\n          timeoutMs: 30000,\n          label: \`Face ORT inference \${modelId}\`,\n          signal,\n        });\n        const imageOutput = selectImageOutput(session, output, 3 * size * size);`,
-    already: "label: `Face ORT inference ${modelId}`",
+    already: 'return activeSession.run(buildFaceFeeds(activeSession, this.ort, signature, chw, strength));',
     label: 'runtime inference',
   },
 ]);
@@ -54,7 +54,7 @@ await patchFile('src/engine/RIFEEngine.js', [
   {
     before: "      const feeds = buildRifeFeeds(session, this.ort, signature, frame0Chw, frame1Chw, width, height, timestep, concatLease);\n      const outputs = await withHardTimeout(() => session.run(feeds), { timeoutMs: 30000, label: `RIFE ORT inference ${modelId}`, onTimeout: () => { this.session?.release?.(); this.session=null; this.sessionModelId=null; this.signature=null; } });\n      const output = selectRifeOutput(session, outputs, 3 * width * height);",
     after: `      const outputs = await runOrtInferenceWithRecovery({\n        modelId,\n        getSession: (id) => this._loadSession(id),\n        invalidateSession: (id, stuck) => this._invalidateSession(id, stuck),\n        run: (activeSession) => {\n          session = activeSession;\n          signature = this.signature || inspectRifeSignature(activeSession);\n          assertDynamicOrMatchingSize(signature, width, height);\n          const feeds = buildRifeFeeds(activeSession, this.ort, signature, frame0Chw, frame1Chw, width, height, timestep, concatLease);\n          return activeSession.run(feeds);\n        },\n        timeoutMs: 30000,\n        label: \`RIFE ORT inference \${modelId}\`,\n      });\n      const output = selectRifeOutput(session, outputs, 3 * width * height);`,
-    already: "label: `RIFE ORT inference ${modelId}`",
+    already: 'return activeSession.run(feeds);',
     label: 'runtime inference',
   },
 ]);
@@ -75,7 +75,7 @@ await patchFile('src/engine/UpscaleEngine.js', [
   {
     before: "        const tensor = new this.ort.Tensor('float32', prepared, inputDims);\n        const outputs = await withHardTimeout(() => session.run({ [inputName]: tensor }), { timeoutMs: 30000, label: `Upscale ORT inference ${modelId}`, signal, onTimeout: () => { this.session?.release?.(); this.session = null; this.sessionModelId = null; } });\n        output = outputs[outputName];",
     after: `        const outputs = await runOrtInferenceWithRecovery({\n          modelId,\n          getSession: (id) => this._loadSession(id),\n          invalidateSession: (id, stuck) => this._invalidateSession(id, stuck),\n          run: (activeSession) => {\n            const activeInputName = activeSession.inputNames[0];\n            const tensor = new this.ort.Tensor('float32', prepared, inputDims);\n            return activeSession.run({ [activeInputName]: tensor });\n          },\n          timeoutMs: 30000,\n          label: \`Upscale ORT inference \${modelId}\`,\n          signal,\n        });\n        output = outputs[outputName];`,
-    already: "label: `Upscale ORT inference ${modelId}`",
+    already: 'return activeSession.run({ [activeInputName]: tensor });',
     label: 'runtime inference',
   },
 ]);
