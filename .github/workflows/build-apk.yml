@@ -1,4 +1,4 @@
-name: BARSA SHOPI v10.0.0 FINAL BUILD
+name: BARSA SHOPI v10.0.0 FINAL RELEASE - SIGNED ONLY
 
 on:
   workflow_dispatch:
@@ -18,7 +18,7 @@ jobs:
     timeout-minutes: 110
 
     steps:
-      - name: Checkout
+      - name: Checkout exact release commit
         uses: actions/checkout@v4
 
       - name: Normalize final version metadata
@@ -111,7 +111,7 @@ jobs:
           set -euo pipefail
           gradle -p android :app:lintDebug :app:lintRelease :app:testDebugUnitTest --stacktrace --no-daemon 2>&1 | tee reports/android-lint-unit.log
 
-      - name: Build debug and release APKs
+      - name: Build debug and unsigned release APKs
         shell: bash
         run: |
           set -euo pipefail
@@ -155,7 +155,28 @@ jobs:
           fi
           echo 'PASS: EMULATOR_BOOTED -> SCRIPT_ENTERED -> APK_INSTALLED -> LAUNCH_1/2/3_PID -> LOGCAT_CAPTURED -> PASSED' | tee reports/android-coldstart-summary.txt
 
-      - name: Collect sign and verify APKs
+      - name: Require production signing credentials
+        shell: bash
+        env:
+          SIGNING_KEY_STORE_BASE64: ${{ secrets.SIGNING_KEY_STORE_BASE64 }}
+          SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
+          SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
+          SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          missing=0
+          for name in SIGNING_KEY_STORE_BASE64 SIGNING_KEY_ALIAS SIGNING_STORE_PASSWORD; do
+            if [[ -z "${!name:-}" ]]; then
+              echo "FINAL RELEASE BLOCKED: missing production signing secret: $name" >&2
+              missing=1
+            fi
+          done
+          if [[ "$missing" -ne 0 ]]; then
+            exit 1
+          fi
+          echo 'Production signing credentials are present.' | tee reports/production-signing-gate.txt
+
+      - name: Sign verify and package FINAL APK
         shell: bash
         env:
           SIGNING_KEY_STORE_BASE64: ${{ secrets.SIGNING_KEY_STORE_BASE64 }}
@@ -165,32 +186,24 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p final/reports
-          DEBUG_APK="$(find android/app/build/outputs/apk/debug -name '*.apk' | head -n 1)"
           RELEASE_APK="$(find android/app/build/outputs/apk/release -name '*.apk' | head -n 1)"
-          test -s "$DEBUG_APK"
           test -s "$RELEASE_APK"
           BT="$ANDROID_HOME/build-tools/36.0.0"
 
           cp "$RELEASE_APK" final/BARSA-SHOPI-v10.0.0-FINAL-release-unsigned.apk
           "$BT/zipalign" -f -p 4 "$RELEASE_APK" final/release-aligned.apk
 
-          SIGNING_MODE="debug-fallback"
-          if [[ -n "${SIGNING_KEY_STORE_BASE64:-}" && -n "${SIGNING_KEY_ALIAS:-}" && -n "${SIGNING_STORE_PASSWORD:-}" ]]; then
-            printf '%s' "$SIGNING_KEY_STORE_BASE64" | base64 --decode > final/release-keystore.jks
-            export BARSA_STORE_PASS="$SIGNING_STORE_PASSWORD"
-            export BARSA_KEY_PASS="${SIGNING_KEY_PASSWORD:-$SIGNING_STORE_PASSWORD}"
-            "$BT/apksigner" sign \
-              --ks final/release-keystore.jks \
-              --ks-key-alias "$SIGNING_KEY_ALIAS" \
-              --ks-pass env:BARSA_STORE_PASS \
-              --key-pass env:BARSA_KEY_PASS \
-              --out final/BARSA-SHOPI-v10.0.0-FINAL-installable.apk \
-              final/release-aligned.apk
-            SIGNING_MODE="production-secret"
-            rm -f final/release-keystore.jks
-          else
-            cp "$DEBUG_APK" final/BARSA-SHOPI-v10.0.0-FINAL-installable.apk
-          fi
+          printf '%s' "$SIGNING_KEY_STORE_BASE64" | base64 --decode > final/release-keystore.jks
+          export BARSA_STORE_PASS="$SIGNING_STORE_PASSWORD"
+          export BARSA_KEY_PASS="${SIGNING_KEY_PASSWORD:-$SIGNING_STORE_PASSWORD}"
+          "$BT/apksigner" sign \
+            --ks final/release-keystore.jks \
+            --ks-key-alias "$SIGNING_KEY_ALIAS" \
+            --ks-pass env:BARSA_STORE_PASS \
+            --key-pass env:BARSA_KEY_PASS \
+            --out final/BARSA-SHOPI-v10.0.0-FINAL-installable.apk \
+            final/release-aligned.apk
+          rm -f final/release-keystore.jks
 
           test -s final/BARSA-SHOPI-v10.0.0-FINAL-installable.apk
           "$BT/zipalign" -c -v 4 final/BARSA-SHOPI-v10.0.0-FINAL-installable.apk > final/reports/zipalign.txt
@@ -199,14 +212,15 @@ jobs:
           grep -q "package: name='com.barsa.shopi'" final/reports/badging.txt
           grep -q "versionName='10.0.0'" final/reports/badging.txt
           sha256sum final/*.apk > final/reports/SHA256SUMS.txt
-          printf '%s\n' "$SIGNING_MODE" > final/reports/signing-mode.txt
+          printf '%s\n' 'production-secret' > final/reports/signing-mode.txt
+          grep -qx 'production-secret' final/reports/signing-mode.txt
           cp reports/* final/reports/ 2>/dev/null || true
           cp reports/npm-audit.json final/reports/ 2>/dev/null || true
           cp android/app/build/reports/lint-results-debug.html final/reports/ 2>/dev/null || true
           cp android/app/build/reports/lint-results-release.html final/reports/ 2>/dev/null || true
           git archive --format=zip --output=final/BARSA-SHOPI-v10.0.0-FINAL-source.zip HEAD
           zip -u final/BARSA-SHOPI-v10.0.0-FINAL-source.zip package-lock.json
-          printf 'BARSA SHOPI v10.0.0 FINAL\nInstallable APK: BARSA-SHOPI-v10.0.0-FINAL-installable.apk\nUnsigned release APK: BARSA-SHOPI-v10.0.0-FINAL-release-unsigned.apk\nAndroid emulator is booted directly by shell; release requires EMULATOR_BOOTED, SCRIPT_ENTERED, APK_INSTALLED, 3 live PID markers, LOGCAT_CAPTURED and PASSED.\nSigning mode is recorded in reports/signing-mode.txt.\nSource, lint, audit, startup, APK signature and SHA256 reports are included.\n' > final/README-FIRST.txt
+          printf 'BARSA SHOPI v10.0.0 FINAL\nInstallable APK: BARSA-SHOPI-v10.0.0-FINAL-installable.apk\nSigning: production secret only. Missing release credentials hard-fail the workflow.\nUnsigned release APK is included only as build evidence and is not the FINAL installable artifact.\nAndroid emulator requires 3 successful cold starts, live PID evidence, logcat capture and no crash/ANR signatures.\nSource, lint, audit, startup, APK signature and SHA256 reports are included.\n' > final/README-FIRST.txt
           rm -f final/release-aligned.apk
 
       - name: Build one downloadable final ZIP
