@@ -49,7 +49,7 @@ patch('src/main.js', {
 
 patch('src/main.js', {
   label: 'release prepared output lease on clear',
-  already: "preparedResult?.release?.().catch(error=>console.error('[BARSA][output-lease][prepared-release-failed]'",
+  already: "preparedResult.release().catch(error=>console.error('[BARSA][output-lease][prepared-release-failed]'",
   from: "function clearPreparedRender(notify=false){\n  if(preparedResult?.url&&preparedResult.url!==resultURL){try{URL.revokeObjectURL(preparedResult.url)}catch{}}\n  preparedResult=null;preparedSignature=null;preparedAt=0;refreshPreparedState();if(notify)toast('تم مسح التجهيز المسبق');\n}",
   to: "function clearPreparedRender(notify=false){\n  if(preparedResult?.url&&preparedResult.url!==resultURL){try{URL.revokeObjectURL(preparedResult.url)}catch{}}\n  if(preparedResult?.release&&preparedResult.release!==lastResultRelease)preparedResult.release().catch(error=>console.error('[BARSA][output-lease][prepared-release-failed]',error));\n  preparedResult=null;preparedSignature=null;preparedAt=0;refreshPreparedState();if(notify)toast('تم مسح التجهيز المسبق');\n}",
 });
@@ -70,7 +70,7 @@ patch('src/main.js', {
 
 patch('src/engine/ApplyStackEngine.js', {
   label: 'release transient native output after durable stage cache copy',
-  already: 'await result.release?.();\n          result.release = null;',
+  already: 'await result.release?.();\n            result.release = null;',
   from: "        if (cacheKey && this.storage.readStageCache) {\n          const diskFile = await this.storage.readStageCache(cacheKey).catch(() => null);\n          if (diskFile?.size) nextFile = diskFile;\n        }\n      }\n\n      const record = {",
   to: "        if (cacheKey && this.storage.readStageCache) {\n          const diskFile = await this.storage.readStageCache(cacheKey).catch(() => null);\n          if (diskFile?.size) {\n            nextFile = diskFile;\n            await result.release?.();\n            result.release = null;\n          }\n        }\n      }\n\n      const record = {",
 });
