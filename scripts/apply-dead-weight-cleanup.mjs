@@ -52,6 +52,8 @@ async function cleanupPipeline() {
   let source = await readFile(files.pipeline, 'utf8');
   source = source.replace(/^\s*qualityMetrics,\s*$/m, '');
   source = source.replace(/^\s*qualityMetrics\.sample\(outputCanvas,\s*encodedFrames\);\s*$/m, '');
+  source = source.replace('          qualityAudit: qualityMetrics.finalize(),', '          qualityAudit: null,');
+  source = source.replace(/^\s*qualityMetrics\.reset\(\);\s*$/m, '');
   if (/\bqualityMetrics\b/.test(source)) {
     throw new Error('QualityMetrics still referenced by production VideoPipeline after cleanup');
   }
