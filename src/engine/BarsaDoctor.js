@@ -128,6 +128,13 @@ export class BarsaDoctor {
         await capture('stress-device-suite', async () => this.manager.deviceTest.run({ autoInstallModels: false, onProgress: stage => onProgress?.(`stress:${stage}`) }));
       }
 
+      await capture('startup-safety', async () => {
+        const startup = this.manager.startupSafety || { safeMode: false, failures: 0, reason: null };
+        const state = this.manager.crashLoopGuard?.snapshot?.() || null;
+        if (startup.safeMode) issues.push(issue('startup-safe-mode', 'medium', 'Crash-loop Safe Mode is active; automatic heavy background model provisioning is suspended for this recovery boot.'));
+        return { ...startup, state };
+      });
+
       await capture('runtime-fault-ledger', async () => {
         const snapshot = this.manager.faultLedger?.snapshot?.({ recentLimit: 24 }) || { totalEvents: 0, activeGroups: 0, errorGroups: 0, groups: [], recent: [] };
         if (snapshot.errorGroups > 0) issues.push(issue('runtime-fault-history', 'medium', `Runtime fault ledger contains ${snapshot.errorGroups} active error group(s); inspect the grouped evidence before release.`));
