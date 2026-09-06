@@ -1,6 +1,7 @@
 import { imageDataToChwFloat32, chwFloat32ToImageData } from './UpscaleEngine.js';
 import { NativeAiClient } from '../platform/NativeAiClient.js';
 import { createOrtSessionWithFallback } from './OrtSessionLoader.js';
+import { withHardTimeout } from './CrashProofRuntime.js';
 
 export const FACE_MODEL_REGISTRY = {
   'gfpgan-1.4': {
@@ -89,11 +90,11 @@ export class FaceRestorationEngine {
   async _loadSession(modelId) {
     if (this.sessions.has(modelId)) return this.sessions.get(modelId);
     const ort = await this._loadRuntime();
-    const loaded = await createOrtSessionWithFallback({
+    const loaded = await withHardTimeout(() => createOrtSessionWithFallback({
       modelManager: this.modelManager, ort, modelId,
       webgpuOptions: [{ graphCapture: false, options: { executionProviders: ['webgpu'], graphOptimizationLevel: 'all' } }],
       wasmOptions: { executionProviders: ['wasm'], graphOptimizationLevel: 'all' },
-    });
+    }), { timeoutMs: 30000, label: `Face session load ${modelId}`, onTimeout: () => { const stuck=this.sessions.get(modelId); stuck?.release?.(); this.sessions.delete(modelId); } });
     const session = loaded.session;
     this.executionProvider = loaded.executionProvider;
     this.modelSourceKind = loaded.sourceKind;
@@ -125,7 +126,7 @@ export class FaceRestorationEngine {
     const signature = resolveFaceSignature(session, config);
     const size = signature.inputSize;
     const input = new Float32Array(3 * size * size);
-    const result = await session.run(buildFaceFeeds(session, this.ort, signature, input, 0.5));
+    const result = await withHardTimeout(() => session.run(buildFaceFeeds(session, this.ort, signature, input, 0.5)), { timeoutMs: 30000, label: `Face self-test ${modelId}` });
     const output = selectImageOutput(session, result, 3 * size * size);
     if (!output?.data || output.data.length !== input.length) {
       throw new Error(`Face model output shape is incompatible with a 3x${size}x${size} image`);
@@ -143,7 +144,7 @@ export class FaceRestorationEngine {
   }
 
   async warmup(modelId) {
-    const session = await this._loadSession(modelId);
+    const session = await withHardTimeout(() => this._loadSession(modelId), { timeoutMs: 30000, label: `Face warmup ${modelId}` });
     return {
       executionProvider: this.executionProvider,
       signature: resolveFaceSignature(session, FACE_MODEL_REGISTRY[modelId]),
@@ -219,7 +220,7 @@ export class FaceRestorationEngine {
       let restoredData = null;
       if (useNative) {
         try {
-          const native = await this.nativeAi.infer(modelId, chw, { channels: 3, width: size, height: size, scale: 1, fidelity: strength, signal });
+          const native = await withHardTimeout(() => this.nativeAi.infer(modelId, chw, { channels: 3, width: size, height: size, scale: 1, fidelity: strength, signal }), { timeoutMs: 30000, label: `Native face inference ${modelId}`, signal });
           if (native.width !== size || native.height !== size || native.channels !== 3) throw new Error(`Native face output is ${native.width}x${native.height}x${native.channels}, expected ${size}x${size}x3`);
           restoredData = native.data;
           this.lastExecutionProvider = `android-native:${native.provider}`;
@@ -233,7 +234,7 @@ export class FaceRestorationEngine {
         }
       }
       if (!restoredData) {
-        const output = await session.run(buildFaceFeeds(session, this.ort, signature, chw, strength));
+        const output = await withHardTimeout(() => session.run(buildFaceFeeds(session, this.ort, signature, chw, strength)), { timeoutMs: 30000, label: `Face ORT inference ${modelId}`, signal, onTimeout: () => { session?.release?.(); this.sessions.delete(modelId); } });
         const imageOutput = selectImageOutput(session, output, 3 * size * size);
         if (!imageOutput?.data) throw new Error('Face model did not return a compatible RGB image tensor');
         restoredData = imageOutput.data;

@@ -4,6 +4,7 @@ import { TypedArrayPool } from './TypedArrayPool.js';
 import { createOrtSessionWithFallback } from './OrtSessionLoader.js';
 import { WebGpuIoArena } from './WebGpuIoArena.js';
 import { WebGpuTileCompositor } from './WebGpuTileCompositor.js';
+import { withHardTimeout } from './CrashProofRuntime.js';
 
 // UpscaleEngine — real ONNX Runtime Web integration for AI upscaling
 // (Real-ESRGAN / Real-CUGAN style models), with Tile Processing + Overlap
@@ -223,10 +224,10 @@ export class UpscaleEngine {
     const webgpuOptions = [
       { graphCapture: false, options: { executionProviders: ['webgpu'], graphOptimizationLevel: 'all' } },
     ];
-    const loaded = await createOrtSessionWithFallback({
+    const loaded = await withHardTimeout(() => createOrtSessionWithFallback({
       modelManager: this.modelManager, ort: this.ort, modelId, webgpuOptions,
       wasmOptions: { executionProviders: ['wasm'], graphOptimizationLevel: 'all' },
-    });
+    }), { timeoutMs: 30000, label: `Upscale session load ${modelId}`, onTimeout: () => { this.session?.release?.(); this.session = null; this.sessionModelId = null; } });
     this.session = loaded.session;
     this.executionProvider = loaded.executionProvider;
     this.graphCaptureEnabled = loaded.graphCaptureEnabled;
@@ -271,7 +272,7 @@ export class UpscaleEngine {
     const testTile = new Float32Array(c * h * w).fill(0.5);
     const tensor = new this.ort.Tensor('float32', testTile, [n, c, h, w]);
     const webStartedAt = performance.now();
-    const outputs = await session.run({ [inputName]: tensor });
+    const outputs = await withHardTimeout(() => session.run({ [inputName]: tensor }), { timeoutMs: 30000, label: `Upscale self-test ${modelId}` });
     const webElapsedMs = performance.now() - webStartedAt;
     const outName = session.outputNames[0];
     const outTensor = outputs[outName];
@@ -373,7 +374,7 @@ export class UpscaleEngine {
 
       if (this.executionProvider === 'webgpu' && this.gpuIoArena?.available && !this.gpuIoDisabledModels.has(modelId)) {
         try {
-          output = await this.gpuIoArena.run({ session, inputName, outputName, input: prepared, inputDims, outputDims, signal });
+          output = await withHardTimeout(() => this.gpuIoArena.run({ session, inputName, outputName, input: prepared, inputDims, outputDims, signal }), { timeoutMs: 30000, label: `Upscale WebGPU IO ${modelId}`, signal });
           this.lastExecutionProvider = 'webgpu:iobinding';
         } catch (error) {
           console.warn(`WebGPU IO binding failed for ${modelId}; using standard ORT path:`, error?.message || error);
@@ -383,7 +384,7 @@ export class UpscaleEngine {
 
       if (!output) {
         const tensor = new this.ort.Tensor('float32', prepared, inputDims);
-        const outputs = await session.run({ [inputName]: tensor });
+        const outputs = await withHardTimeout(() => session.run({ [inputName]: tensor }), { timeoutMs: 30000, label: `Upscale ORT inference ${modelId}`, signal, onTimeout: () => { this.session?.release?.(); this.session = null; this.sessionModelId = null; } });
         output = outputs[outputName];
         this.lastExecutionProvider = this.executionProvider;
       }
@@ -448,7 +449,7 @@ export class UpscaleEngine {
             ? padCHWEdge(chw, 3, tile.width, tile.height, runWidth, runHeight, this.tensorPool.acquire(Float32Array, 3 * runWidth * runHeight))
             : chw;
           try {
-            gpuOutput = await this.gpuIoArena.runGpu({
+            gpuOutput = await withHardTimeout(() => this.gpuIoArena.runGpu({
               session,
               inputName: session.inputNames[0],
               outputName: session.outputNames[0],
@@ -456,7 +457,7 @@ export class UpscaleEngine {
               inputDims: [1, 3, runHeight, runWidth],
               outputDims: [1, 3, runHeight * scale, runWidth * scale],
               signal,
-            });
+            }), { timeoutMs: 30000, label: `Upscale GPU tile ${modelId}`, signal });
             this.lastExecutionProvider = 'webgpu:iobinding+gpu-compositor';
             this.gpuCompositor.composeTile({
               gpuBuffer: gpuOutput.gpuBuffer,

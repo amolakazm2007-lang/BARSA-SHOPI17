@@ -3,6 +3,7 @@ import { NativeAiClient } from '../platform/NativeAiClient.js';
 import { TypedArrayPool } from './TypedArrayPool.js';
 import { createOrtSessionWithFallback } from './OrtSessionLoader.js';
 import { WebGpuIoArena } from './WebGpuIoArena.js';
+import { withHardTimeout, BarsaError } from './CrashProofRuntime.js';
 //
 // RIFE exports use several input signatures. Two conventions are
 // common across RIFE ONNX exports found in the wild:
@@ -165,11 +166,11 @@ export class RIFEEngine {
       this.ort.env.wasm.numThreads = crossOriginIsolated ? Math.min(4, navigator.hardwareConcurrency || 1) : 1;
       this.ort.env.wasm.wasmPaths = new URL('./vendor/ort-wasm/', document.baseURI).href;
     }
-    const loaded = await createOrtSessionWithFallback({
+    const loaded = await withHardTimeout(() => createOrtSessionWithFallback({
       modelManager: this.modelManager, ort: this.ort, modelId,
       webgpuOptions: this.preferGpu ? [{ graphCapture: false, options: { executionProviders: ['webgpu'], graphOptimizationLevel: 'all' } }] : [],
       wasmOptions: { executionProviders: ['wasm'], graphOptimizationLevel: 'all' },
-    });
+    }), { timeoutMs: 30000, label: `RIFE session load ${modelId}`, onTimeout: () => { this.session?.release?.(); this.session=null; this.sessionModelId=null; this.signature=null; } });
     this.session = loaded.session;
     this.executionProvider = loaded.executionProvider;
     this.modelSourceKind = loaded.sourceKind;
@@ -182,7 +183,7 @@ export class RIFEEngine {
   }
 
   async runSelfTest(modelId = 'rife-tensorstack') {
-    const session = await this._loadSession(modelId);
+    const session = await withHardTimeout(() => this._loadSession(modelId), { timeoutMs: 30000, label: `RIFE self-test load ${modelId}` });
     const signature = this.signature || inspectRifeSignature(session);
     const w = signature.width || 64, h = signature.height || 64;
     const frame0 = new Float32Array(3 * h * w).fill(0.3);
@@ -190,7 +191,7 @@ export class RIFEEngine {
     const concatLease = signature.convention === 'concat' ? this.tensorPool.acquire(Float32Array, 6 * w * h) : null;
     const feeds = buildRifeFeeds(session, this.ort, signature, frame0, frame1, w, h, 0.5, concatLease);
     let outputs;
-    try { outputs = await session.run(feeds); }
+    try { outputs = await withHardTimeout(() => session.run(feeds), { timeoutMs: 30000, label: `RIFE self-test inference ${modelId}` }); }
     finally { if (concatLease) this.tensorPool.release(concatLease); }
     const out = selectRifeOutput(session, outputs, 3 * h * w);
     if (!out) {
@@ -252,7 +253,7 @@ export class RIFEEngine {
           if (!ready) throw new Error('Android native RIFE model registration failed');
           this.nativePrepared.add(modelId);
         }
-        const native = await this.nativeAi.inferRife(modelId, frame0Chw, frame1Chw, { width, height, timestep });
+        const native = await withHardTimeout(() => this.nativeAi.inferRife(modelId, frame0Chw, frame1Chw, { width, height, timestep }), { timeoutMs: 30000, label: `Native RIFE inference ${modelId}` });
         this.executionProvider = `android-native:${native.provider}`;
         this.lastExecutionProvider = this.executionProvider;
         return { data:native.data, dims:[1,3,native.height,native.width] };
@@ -280,9 +281,9 @@ export class RIFEEngine {
           const cpuFeeds = {};
           if (signature.timestepInput) cpuFeeds[signature.timestepInput] = makeScalarFeed(session, this.ort, signature.timestepInput, timestep);
           if (signature.scaleInput) cpuFeeds[signature.scaleInput] = makeScalarFeed(session, this.ort, signature.scaleInput, 1);
-          const gpuOutput = await this.gpuIoArena.runMulti({
+          const gpuOutput = await withHardTimeout(() => this.gpuIoArena.runMulti({
             session, gpuFeeds, cpuFeeds, outputName, outputDims: [1, 3, height, width],
-          });
+          }), { timeoutMs: 30000, label: `RIFE WebGPU IO inference ${modelId}` });
           if (gpuOutput.data.length !== 3 * width * height) throw new Error('RIFE GPU output length mismatch');
           this.lastExecutionProvider = 'webgpu:iobinding';
           return gpuOutput;
@@ -293,7 +294,7 @@ export class RIFEEngine {
       }
 
       const feeds = buildRifeFeeds(session, this.ort, signature, frame0Chw, frame1Chw, width, height, timestep, concatLease);
-      const outputs = await session.run(feeds);
+      const outputs = await withHardTimeout(() => session.run(feeds), { timeoutMs: 30000, label: `RIFE ORT inference ${modelId}`, onTimeout: () => { this.session?.release?.(); this.session=null; this.sessionModelId=null; this.signature=null; } });
       const output = selectRifeOutput(session, outputs, 3 * width * height);
       if (!output) throw new Error(`RIFE returned no RGB frame matching ${width}x${height}`);
       this.lastExecutionProvider = this.executionProvider;
@@ -331,7 +332,7 @@ export class RIFEEngine {
   }
 
   async warmup(modelId) {
-    await this._loadSession(modelId);
+    await withHardTimeout(() => this._loadSession(modelId), { timeoutMs: 30000, label: `RIFE warmup ${modelId}` });
     return { executionProvider: this.executionProvider, signature: this.signature };
   }
 
