@@ -47,6 +47,10 @@ read_boot_id() {
 capture_diagnostics() {
   local reason="${1:-unknown}"
   printf '%s\n' "$reason" > reports/android-gate-failure-reason.txt
+
+  # Diagnostics must not become empty merely because the emulator transport is
+  # transiently offline. Give ADB a bounded recovery window before collecting.
+  wait_for_adb_device 12 2 >/dev/null 2>&1 || true
   timeout 10s adb devices -l > reports/android-adb-devices-failure.txt 2>&1 || true
   timeout 20s adb logcat -d -v time > reports/android-logcat.txt 2>&1 || true
   timeout 15s adb shell dumpsys activity processes > reports/android-processes.txt 2>&1 || true
@@ -56,6 +60,77 @@ capture_diagnostics() {
   timeout 15s adb shell dumpsys meminfo "$PACKAGE" > reports/android-meminfo-failure.txt 2>&1 || true
   timeout 10s adb exec-out screencap -p > reports/android-failure.png 2>/dev/null || true
   tail -n 200 reports/android-emulator.log > reports/android-emulator-tail.txt 2>/dev/null || true
+}
+
+has_app_crash_signature() {
+  local file="$1"
+  grep -E "FATAL EXCEPTION|ANR in ${PACKAGE//./\\.}|am_crash.*${PACKAGE//./\\.}|Process ${PACKAGE//./\\.} .* has died" "$file" >/dev/null 2>&1
+}
+
+start_activity_command() {
+  local pass="$1"
+  local log="reports/android-launch-${pass}.log"
+  : > "$log"
+
+  # Do not use `am start -W` here. On the Android emulator its waiter can hang
+  # when the ADB transport reconnects even though Android/app state is healthy.
+  # We validate the stronger conditions (live PID + resumed MainActivity)
+  # independently below.
+  set +e
+  timeout 12s adb shell am start -n "$ACTIVITY" >> "$log" 2>&1
+  local status=$?
+  set -e
+  if [[ "$status" -eq 0 ]]; then
+    return 0
+  fi
+
+  printf '\n[first start command status=%s; attempting bounded ADB recovery]\n' "$status" >> "$log"
+  if ! wait_for_adb_device 12 2; then
+    return 1
+  fi
+
+  set +e
+  timeout 12s adb shell am start -n "$ACTIVITY" >> "$log" 2>&1
+  status=$?
+  set -e
+  return "$status"
+}
+
+wait_for_app_ready() {
+  local pass="$1"
+  local pid=""
+  local process_seen=0
+  local activities_file="reports/android-activities-${pass}.txt"
+
+  for _ in $(seq 1 30); do
+    if [[ -n "${EMU_PID:-}" ]] && ! kill -0 "$EMU_PID" 2>/dev/null; then
+      return 4
+    fi
+
+    if ! wait_for_adb_device 2 1; then
+      sleep 1
+      continue
+    fi
+
+    pid="$(timeout 6s adb shell pidof "$PACKAGE" 2>/dev/null | tr -d '\r' || true)"
+    if [[ -n "$pid" ]]; then
+      process_seen=1
+      timeout 8s adb shell dumpsys activity activities > "$activities_file" 2>&1 || true
+      if grep -Eq "(topResumedActivity=|ResumedActivity:|mResumedActivity=).*${PACKAGE}/\.MainActivity" "$activities_file"; then
+        printf '%s' "$pid"
+        return 0
+      fi
+    elif [[ "$process_seen" -eq 1 ]]; then
+      return 3
+    fi
+
+    sleep 2
+  done
+
+  if [[ "$process_seen" -eq 1 ]]; then
+    return 2
+  fi
+  return 1
 }
 
 cleanup() {
@@ -137,38 +212,43 @@ printf 'APK_INSTALLED\n' | tee reports/android-apk-installed.txt
 
 timeout 10s adb logcat -c || true
 for PASS in 1 2 3; do
-  if ! wait_for_adb_device 6 3; then
+  if ! wait_for_adb_device 10 2; then
     capture_diagnostics "LAUNCH_${PASS}_ADB_OFFLINE_BEFORE_START"
     echo "Android device went offline before BARSA cold-start pass $PASS" >&2
     exit 1
   fi
 
   timeout 10s adb shell am force-stop "$PACKAGE" || true
+  sleep 1
 
-  set +e
-  timeout 30s adb shell am start -W -n "$ACTIVITY" > "reports/android-launch-${PASS}.log" 2>&1
-  START_STATUS=$?
-  set -e
+  if ! start_activity_command "$PASS"; then
+    capture_diagnostics "LAUNCH_${PASS}_START_COMMAND_FAILURE"
+    cat "reports/android-launch-${PASS}.log" || true
+    echo "BARSA cold-start pass $PASS could not issue a stable activity-start command" >&2
+    exit 1
+  fi
   cat "reports/android-launch-${PASS}.log"
 
-  if [[ "$START_STATUS" -ne 0 ]]; then
-    if ! wait_for_adb_device 18 5; then
-      capture_diagnostics "LAUNCH_${PASS}_ADB_OFFLINE_DURING_START"
-      echo "Android device went offline during BARSA cold-start pass $PASS" >&2
-      exit 1
-    fi
-    capture_diagnostics "LAUNCH_${PASS}_TIMEOUT_OR_FAILURE"
-    echo "BARSA cold-start pass $PASS did not complete am start -W within 30 seconds" >&2
+  set +e
+  PID="$(wait_for_app_ready "$PASS")"
+  READY_STATUS=$?
+  set -e
+
+  if [[ "$READY_STATUS" -eq 4 ]]; then
+    capture_diagnostics "LAUNCH_${PASS}_EMULATOR_EXITED"
+    echo "Android emulator exited during BARSA cold-start pass $PASS" >&2
+    exit 1
+  elif [[ "$READY_STATUS" -eq 3 || "$READY_STATUS" -eq 1 ]]; then
+    capture_diagnostics "LAUNCH_${PASS}_PROCESS_DIED"
+    echo "BARSA process failed to remain alive during cold-start pass $PASS" >&2
+    exit 1
+  elif [[ "$READY_STATUS" -eq 2 ]]; then
+    capture_diagnostics "LAUNCH_${PASS}_NOT_RESUMED"
+    echo "BARSA process exists but MainActivity is not resumed during pass $PASS" >&2
     exit 1
   fi
 
-  sleep 10
-
-  if ! wait_for_adb_device 18 5; then
-    capture_diagnostics "LAUNCH_${PASS}_ADB_OFFLINE_AFTER_START"
-    echo "Android device went offline after BARSA cold-start pass $PASS; not classifying this as an app crash" >&2
-    exit 1
-  fi
+  printf 'LAUNCH_%s_PID=%s\n' "$PASS" "$PID" | tee "reports/android-launch-${PASS}-pid.txt"
 
   if ! CURRENT_BOOT_ID="$(read_boot_id 8 2)"; then
     capture_diagnostics "LAUNCH_${PASS}_BOOT_ID_UNAVAILABLE"
@@ -182,32 +262,27 @@ for PASS in 1 2 3; do
     exit 1
   fi
 
-  PID="$(timeout 10s adb shell pidof "$PACKAGE" 2>/dev/null || true)"
-  PID="$(printf '%s' "$PID" | tr -d '\r')"
-  if [[ -z "$PID" ]]; then
-    capture_diagnostics "LAUNCH_${PASS}_PROCESS_DIED"
-    echo "BARSA process died during cold-start pass $PASS" >&2
+  timeout 15s adb logcat -d -v time > "reports/android-logcat-${PASS}.txt" 2>&1 || true
+  if has_app_crash_signature "reports/android-logcat-${PASS}.txt"; then
+    capture_diagnostics "LAUNCH_${PASS}_CRASH_OR_ANR_SIGNATURE"
+    echo "Crash/ANR signature detected during BARSA cold-start pass $PASS" >&2
     exit 1
   fi
 
-  printf 'LAUNCH_%s_PID=%s\n' "$PASS" "$PID" | tee "reports/android-launch-${PASS}-pid.txt"
-
-  timeout 10s adb shell dumpsys activity activities > "reports/android-activities-${PASS}.txt" 2>&1 || true
-  if ! grep -Eq "(topResumedActivity=|ResumedActivity:|mResumedActivity=).*${PACKAGE}/\.MainActivity" "reports/android-activities-${PASS}.txt"; then
-    capture_diagnostics "LAUNCH_${PASS}_NOT_RESUMED"
-    echo "BARSA process exists but MainActivity is not resumed during pass $PASS" >&2
-    exit 1
-  fi
 done
 
 timeout 10s adb exec-out screencap -p > reports/android-startup.png 2>/dev/null || true
 timeout 15s adb shell uiautomator dump /sdcard/barsa-window.xml >/dev/null 2>&1 || true
 timeout 15s adb pull /sdcard/barsa-window.xml reports/android-window.xml >/dev/null 2>&1 || true
+if ! wait_for_adb_device 12 2; then
+  capture_diagnostics 'ADB_OFFLINE_BEFORE_FINAL_LOGCAT'
+  exit 1
+fi
 timeout 20s adb logcat -d -v time > reports/android-logcat.txt
 test -s reports/android-logcat.txt
 printf 'LOGCAT_CAPTURED\n' | tee reports/android-logcat-captured.txt
 
-if grep -E "FATAL EXCEPTION|ANR in ${PACKAGE//./\\.}|am_crash.*${PACKAGE//./\\.}|Process ${PACKAGE//./\\.} .* has died" reports/android-logcat.txt; then
+if has_app_crash_signature reports/android-logcat.txt; then
   capture_diagnostics 'CRASH_OR_ANR_SIGNATURE'
   echo 'Crash/ANR signature detected in Android cold-start gate' >&2
   exit 1
