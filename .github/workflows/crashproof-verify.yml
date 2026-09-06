@@ -33,6 +33,7 @@ jobs:
           node scripts/apply-crashproof-face.mjs
           node scripts/apply-p0-e2e-runtime-fixes.mjs
           node scripts/apply-p0-output-lease-fixes.mjs
+          node scripts/apply-doctor-control-plane.mjs
       - name: Update vulnerable build and browser dependencies safely
         run: npm install --save-dev --save-exact vite@6.4.3 playwright@1.63.0 --package-lock-only
       - name: Persist deterministic integration updates safely
@@ -52,6 +53,7 @@ jobs:
             node scripts/apply-crashproof-face.mjs
             node scripts/apply-p0-e2e-runtime-fixes.mjs
             node scripts/apply-p0-output-lease-fixes.mjs
+            node scripts/apply-doctor-control-plane.mjs
             npm install --save-dev --save-exact vite@6.4.3 playwright@1.63.0 --package-lock-only
 
             if git diff --quiet; then
@@ -59,7 +61,7 @@ jobs:
               exit 0
             fi
 
-            git add src/main.js src/engine/VideoPipeline.js src/engine/WebGL2Engine.js src/engine/StorageManager.js src/engine/ApplyStackEngine.js src/engine/RIFEEngine.js src/engine/UpscaleEngine.js src/engine/FaceRestorationEngine.js package.json package-lock.json
+            git add src/main.js src/engine/EngineManager.js src/engine/VideoPipeline.js src/engine/WebGL2Engine.js src/engine/StorageManager.js src/engine/ApplyStackEngine.js src/engine/RIFEEngine.js src/engine/UpscaleEngine.js src/engine/FaceRestorationEngine.js package.json package-lock.json
             git commit -m "Apply crash-proof pipeline integration and security updates"
             if git push origin HEAD:crashproof-final; then
               echo "Generated integration persisted by fast-forward push."
