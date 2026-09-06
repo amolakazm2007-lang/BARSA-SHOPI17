@@ -204,9 +204,12 @@ jobs:
             adb shell am force-stop com.barsa.shopi || true
             adb shell am start -W -n com.barsa.shopi/.MainActivity | tee "reports/android-launch-${PASS}.log"
             sleep 10
-            PID="$(adb shell pidof com.barsa.shopi | tr -d '\r')"
+            PID="$(adb shell pidof com.barsa.shopi 2>/dev/null || true)"
+            PID="$(printf '%s' "$PID" | tr -d '\r')"
             if [[ -z "$PID" ]]; then
-              adb logcat -d -v time > reports/android-logcat.txt
+              adb logcat -d -v time > reports/android-logcat.txt || true
+              adb shell dumpsys activity processes > reports/android-processes.txt || true
+              adb shell dumpsys activity exit-info com.barsa.shopi > reports/android-exit-info.txt || true
               echo "BARSA process died during cold-start pass $PASS" >&2
               exit 1
             fi
