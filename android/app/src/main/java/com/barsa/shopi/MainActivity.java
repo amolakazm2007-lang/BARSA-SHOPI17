@@ -9,6 +9,7 @@ import android.content.*;
 import android.net.Uri;
 import android.webkit.*;
 import android.view.*;
+import android.widget.FrameLayout;
 import android.graphics.Color;
 import android.window.OnBackInvokedCallback;
 import android.window.OnBackInvokedDispatcher;
@@ -23,6 +24,7 @@ public final class MainActivity extends Activity {
     private static final int FILE_CHOOSER = 9049;
     private static final long STARTUP_WATCHDOG_MS = 8000L;
     private WebView webView;
+    private FrameLayout webRoot;
     private int webViewGeneration = 0;
     private ValueCallback<Uri[]> fileCallback;
     private AssetServer assetServer;
@@ -39,7 +41,7 @@ public final class MainActivity extends Activity {
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         configureWindow();
-        webView = new WebView(this); webViewGeneration++; setContentView(webView); applyWindowInsets(webView);
+        installWebSurface();
         // NativeAiRuntime is intentionally lightweight at construction time. ORT
         // itself is lazy-loaded on the first real AI request, never during launch.
         nativeAi = new NativeAiRuntime(this);
@@ -55,6 +57,29 @@ public final class MainActivity extends Activity {
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         getWindow().setStatusBarColor(Color.TRANSPARENT);
         getWindow().setNavigationBarColor(Color.TRANSPARENT);
+    }
+
+    /**
+     * Put an ordinary native container on screen before WebView begins loading.
+     * Android 12+ keeps the system splash visible until the Activity draws its
+     * first frame. A raw WebView can occasionally defer that frame while its
+     * renderer process is starting, leaving a fully resumed Activity hidden
+     * behind the splash (and therefore apparently untouchable). The native root
+     * draws immediately; WebView then fills it when Chromium becomes ready.
+     */
+    private void installWebSurface() {
+        webRoot = new FrameLayout(this);
+        webRoot.setBackgroundColor(Color.rgb(2,4,11));
+        webView = new WebView(this);
+        webViewGeneration++;
+        webView.setBackgroundColor(Color.rgb(2,4,11));
+        webRoot.addView(webView, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT));
+        setContentView(webRoot);
+        webRoot.setVisibility(View.VISIBLE);
+        webRoot.postInvalidateOnAnimation();
+        applyWindowInsets(webView);
     }
 
     private boolean isCurrentWebView(WebView target, int generation) {
@@ -107,7 +132,9 @@ public final class MainActivity extends Activity {
         if (Build.VERSION.SDK_INT >= 26) s.setSafeBrowsingEnabled(true);
         webView.setBackgroundColor(Color.rgb(2,4,11));
         webView.setOverScrollMode(View.OVER_SCROLL_NEVER); webView.setVerticalScrollBarEnabled(false); webView.setHorizontalScrollBarEnabled(false);
-        webView.setLayerType(View.LAYER_TYPE_HARDWARE, null);
+        // Do not force WebView into a separate hardware layer. The Activity is
+        // already hardware accelerated; forcing an extra layer can delay the
+        // first draw while Chromium's renderer is still attaching.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) webView.setRendererPriorityPolicy(WebView.RENDERER_PRIORITY_IMPORTANT, true);
         webView.addJavascriptInterface(nativeBridge, "BarsaAndroid");
         webView.setWebViewClient(new WebViewClient() {
@@ -222,7 +249,8 @@ public final class MainActivity extends Activity {
             try { stale.removeJavascriptInterface("BarsaAndroid"); } catch (Exception ignored) {}
             try { stale.destroy(); } catch (Exception ignored) {}
         }
-        webView = new WebView(this); webViewGeneration++; setContentView(webView); applyWindowInsets(webView); configureWebView();
+        installWebSurface();
+        configureWebView();
         if (repeated && crashed) {
             showNativeStartupError("Android WebView stopped repeatedly. BARSA released AI memory to prevent a crash loop.");
             return;
@@ -267,6 +295,7 @@ public final class MainActivity extends Activity {
         if (nativeBridge != null) nativeBridge.cancelAllExports();
         WebView stale = webView;
         webView = null;
+        webRoot = null;
         webViewGeneration++;
         if (stale != null) {
             try { ViewCompat.setOnApplyWindowInsetsListener(stale, null); } catch (Exception ignored) {}
