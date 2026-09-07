@@ -20,7 +20,7 @@ test('model provisioner retries transient install failures and verifies readines
   assert.equal(installs, 2);
 });
 
-test('final Android shell is Java 17, v10 FINAL and high-priority hardware WebView', async () => {
+test('final Android shell is Java 17, v10 FINAL and uses first-draw-safe high-priority WebView', async () => {
   const gradle = await readFile(new URL('../android/app/build.gradle', import.meta.url), 'utf8');
   const main = await readFile(new URL('../android/app/src/main/java/com/barsa/shopi/MainActivity.java', import.meta.url), 'utf8');
   assert.match(gradle, /versionCode 1002000/);
@@ -30,6 +30,9 @@ test('final Android shell is Java 17, v10 FINAL and high-priority hardware WebVi
   assert.match(main, /WindowInsetsCompat\.Type\.systemBars\(\)/);
   assert.match(main, /WindowInsetsCompat\.Type\.ime\(\)/);
   assert.match(main, /WindowInsetsCompat\.Type\.displayCutout\(\)/);
-  assert.match(main, /LAYER_TYPE_HARDWARE/);
+  assert.match(main, /private FrameLayout webRoot/);
+  assert.match(main, /setContentView\(webRoot\)/);
+  assert.match(main, /postInvalidateOnAnimation\(\)/);
+  assert.doesNotMatch(main, /setLayerType\(View\.LAYER_TYPE_HARDWARE/);
   assert.match(main, /RENDERER_PRIORITY_IMPORTANT/);
 });
