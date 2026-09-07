@@ -27,3 +27,10 @@ test('renderer recovery installs the same immediately drawable native surface', 
   assert.match(recovery, /installWebSurface\(\)/);
   assert.match(recovery, /configureWebView\(\)/);
 });
+
+test('Android RC refuses splash-only resumes and requires first-window-drawn evidence for all three launches', async () => {
+  const workflow = await read('.github/workflows/android-rc-verify.yml');
+  assert.match(workflow, /android-launch-\$\{PASS\}-first-draw\.txt/);
+  assert.match(workflow, /FIRST_WINDOW_DRAWN/);
+  assert.match(workflow, /cold-start, first-draw and logcat gates/);
+});
