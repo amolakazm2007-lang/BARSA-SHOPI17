@@ -70,7 +70,7 @@ jobs:
         run: |
           set -euo pipefail
           bash -n scripts/android-coldstart-gate.sh
-          node --test tests/AndroidColdStartGate.test.mjs
+          node --test tests/AndroidColdStartGate.test.mjs tests/AndroidFirstDrawContract.test.mjs tests/AndroidTouchControlContract.test.mjs
 
       - name: Verify runtime and full JavaScript suite
         shell: bash
@@ -130,7 +130,7 @@ jobs:
           chmod +x scripts/android-coldstart-gate.sh
           scripts/android-coldstart-gate.sh
 
-      - name: Validate process startup and logcat evidence
+      - name: Validate process startup first draw and logcat evidence
         shell: bash
         run: |
           set -euo pipefail
@@ -142,6 +142,8 @@ jobs:
           for PASS in 1 2 3; do
             test -f "reports/android-launch-${PASS}-pid.txt"
             test -f "reports/android-launch-${PASS}-boot-id.txt"
+            test -f "reports/android-launch-${PASS}-first-draw.txt"
+            grep -qx 'FIRST_WINDOW_DRAWN' "reports/android-launch-${PASS}-first-draw.txt"
           done
           test -s reports/android-logcat.txt
           test -s reports/android-meminfo.txt
@@ -150,7 +152,7 @@ jobs:
             echo 'FAIL: app crash or ANR signature detected' | tee reports/android-rc-summary.txt
             exit 1
           fi
-          echo 'PASS: Android RC cold-start and logcat gates' | tee reports/android-rc-summary.txt
+          echo 'PASS: Android RC cold-start, first-draw and logcat gates' | tee reports/android-rc-summary.txt
 
       - name: Package honest RC evidence
         shell: bash
